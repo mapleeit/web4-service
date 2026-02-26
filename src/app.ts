@@ -54,7 +54,13 @@ app.get("/.well-known/agent-services", (req: Request, res: Response) => {
 });
 
 app.post("/agent/services/:serviceId/invoke", (req: Request, res: Response) => {
-  const { serviceId } = req.params;
+  const rawServiceId = req.params.serviceId;
+  const serviceId = Array.isArray(rawServiceId) ? rawServiceId[0] : rawServiceId;
+  if (!serviceId) {
+    res.status(400).json({ error: "invalid_service_id" });
+    return;
+  }
+
   const service = getAgentServiceDescriptor(serviceId);
 
   if (!service) {
