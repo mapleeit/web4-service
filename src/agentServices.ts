@@ -135,8 +135,18 @@ const getService = (serviceId: string): AgentService | undefined =>
 const removeTrailingSlash = (value: string): string =>
   value.endsWith("/") ? value.slice(0, -1) : value;
 
+const toServiceDescriptor = (service: AgentService): AgentServiceDescriptor => ({
+  id: service.id,
+  name: service.name,
+  description: service.description,
+  endpoint: service.endpoint,
+  inputSchema: service.inputSchema,
+  outputSchema: service.outputSchema,
+  payment: service.payment,
+});
+
 export const listAgentServices = (): AgentServiceDescriptor[] =>
-  agentServices.map(({ handler: _handler, ...descriptor }) => descriptor);
+  agentServices.map(toServiceDescriptor);
 
 export const getAgentServiceDescriptor = (
   serviceId: string
@@ -146,8 +156,7 @@ export const getAgentServiceDescriptor = (
     return undefined;
   }
 
-  const { handler: _handler, ...descriptor } = service;
-  return descriptor;
+  return toServiceDescriptor(service);
 };
 
 export const invokeAgentService = (
