@@ -15,6 +15,9 @@
   "keywords": [],
   "license": "MIT",
   "dependencies": {
+    "@x402/core": "^2.5.0",
+    "@x402/evm": "^2.5.0",
+    "@x402/express": "^2.5.0",
     "express": "^5.2.1"
   },
   "devDependencies": {

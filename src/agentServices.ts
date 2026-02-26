@@ -1,13 +1,12 @@
-export const PAYMENT_REQUIRED_HEADER = "PAYMENT-REQUIRED";
-export const PAYMENT_SIGNATURE_HEADER = "PAYMENT-SIGNATURE";
-export const PAYMENT_RESPONSE_HEADER = "PAYMENT-RESPONSE";
+import { runPerplexitySearch } from "./perplexitySearch";
 
 export interface X402PaymentTerms {
   scheme: "exact";
   network: string;
   asset: "USDC";
-  amount: string;
+  price: string;
   payTo: string;
+  facilitator: string;
 }
 
 export interface AgentServiceDescriptor {
@@ -20,38 +19,41 @@ export interface AgentServiceDescriptor {
   payment?: X402PaymentTerms;
 }
 
+export interface PaidRouteDefinition {
+  method: "POST";
+  path: string;
+  description: string;
+  payment: X402PaymentTerms;
+}
+
+export class AgentServiceInputError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentServiceInputError";
+  }
+}
+
 interface AgentService extends AgentServiceDescriptor {
-  handler: (input: Record<string, unknown>) => Record<string, unknown>;
-}
-
-export interface PaymentRequiredPayload {
-  version: string;
-  serviceId: string;
-  endpoint: string;
-  accepted: X402PaymentTerms[];
-  note: string;
-}
-
-export interface PaymentResponsePayload {
-  version: string;
-  serviceId: string;
-  status: "settled";
-  settledAt: string;
-  paymentReference: string;
+  handler: (
+    input: Record<string, unknown>
+  ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 }
 
 const defaultPayToAddress =
   process.env.X402_PAY_TO ??
   "0x000000000000000000000000000000000000dEaD";
-const defaultNetwork = process.env.X402_NETWORK ?? "eip155:8453";
+const defaultNetwork = process.env.X402_NETWORK ?? "eip155:84532";
+const defaultPrice = process.env.X402_PRICE ?? "$0.02";
+const defaultFacilitator =
+  process.env.X402_FACILITATOR_URL ?? "https://facilitator.x402.org";
 
-const asNonEmptyString = (value: unknown, fallback: string): string => {
+const asNonEmptyString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
-    return fallback;
+    return undefined;
   }
 
   const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : fallback;
+  return trimmed.length > 0 ? trimmed : undefined;
 };
 
 const agentServices: AgentService[] = [
@@ -74,7 +76,7 @@ const agentServices: AgentService[] = [
       },
     },
     handler: (input) => {
-      const message = asNonEmptyString(input.message, "hello agent");
+      const message = asNonEmptyString(input.message) ?? "hello agent";
       return {
         message,
         echoedAt: new Date().toISOString(),
@@ -82,49 +84,43 @@ const agentServices: AgentService[] = [
     },
   },
   {
-    id: "research-brief",
-    name: "Research Brief (Paid)",
+    id: "perplexity-search",
+    name: "Perplexity Web Search (Paid)",
     description:
-      "Paid endpoint that returns concise market-style briefings for agents.",
-    endpoint: "/agent/services/research-brief/invoke",
+      "Paid web search endpoint powered by Perplexity for agent workflows.",
+    endpoint: "/agent/services/perplexity-search/invoke",
     inputSchema: {
       type: "object",
+      required: ["query"],
       properties: {
-        topic: { type: "string" },
-        audience: { type: "string" },
+        query: { type: "string" },
+        model: { type: "string" },
       },
     },
     outputSchema: {
       type: "object",
       properties: {
-        topic: { type: "string" },
-        audience: { type: "string" },
-        insight: { type: "string" },
-        nextActions: { type: "array", items: { type: "string" } },
+        answer: { type: "string" },
+        citations: { type: "array", items: { type: "string" } },
+        model: { type: "string" },
       },
     },
     payment: {
       scheme: "exact",
       network: defaultNetwork,
       asset: "USDC",
-      amount: "0.01",
+      price: defaultPrice,
       payTo: defaultPayToAddress,
+      facilitator: defaultFacilitator,
     },
-    handler: (input) => {
-      const topic = asNonEmptyString(input.topic, "agent infrastructure");
-      const audience = asNonEmptyString(input.audience, "builders");
+    handler: async (input) => {
+      const query = asNonEmptyString(input.query);
+      if (!query) {
+        throw new AgentServiceInputError("query must be a non-empty string");
+      }
 
-      return {
-        topic,
-        audience,
-        insight:
-          "x402 can gate agent APIs with native HTTP 402 payment negotiation.",
-        nextActions: [
-          "Expose explicit pricing metadata in service discovery responses.",
-          "Return HTTP 402 + payment instructions when signature is missing.",
-          "Retry the same call after wallet settlement with PAYMENT-SIGNATURE.",
-        ],
-      };
+      const model = asNonEmptyString(input.model);
+      return runPerplexitySearch({ query, model });
     },
   },
 ];
@@ -159,10 +155,20 @@ export const getAgentServiceDescriptor = (
   return toServiceDescriptor(service);
 };
 
-export const invokeAgentService = (
+export const listPaidRouteDefinitions = (): PaidRouteDefinition[] =>
+  agentServices
+    .filter((service) => service.payment)
+    .map((service) => ({
+      method: "POST",
+      path: service.endpoint,
+      description: service.description,
+      payment: service.payment as X402PaymentTerms,
+    }));
+
+export const invokeAgentService = async (
   serviceId: string,
   input: Record<string, unknown>
-): Record<string, unknown> | undefined => {
+): Promise<Record<string, unknown> | undefined> => {
   const service = getService(serviceId);
   if (!service) {
     return undefined;
@@ -188,46 +194,3 @@ export const buildAgentManifest = (
     })),
   };
 };
-
-export const buildPaymentRequiredPayload = (
-  serviceId: string
-): PaymentRequiredPayload | undefined => {
-  const service = getService(serviceId);
-  if (!service?.payment) {
-    return undefined;
-  }
-
-  return {
-    version: "x402-1",
-    serviceId: service.id,
-    endpoint: service.endpoint,
-    accepted: [service.payment],
-    note: "Retry the same request with a valid PAYMENT-SIGNATURE header.",
-  };
-};
-
-export const buildPaymentResponsePayload = (
-  serviceId: string,
-  paymentSignature: string
-): PaymentResponsePayload | undefined => {
-  const service = getService(serviceId);
-  if (!service?.payment) {
-    return undefined;
-  }
-
-  return {
-    version: "x402-1",
-    serviceId: service.id,
-    status: "settled",
-    settledAt: new Date().toISOString(),
-    paymentReference: paymentSignature.slice(0, 20),
-  };
-};
-
-export const verifyPaymentSignature = (paymentSignature: string): boolean => {
-  const normalized = paymentSignature.trim();
-  return normalized.startsWith("x402_demo_") && normalized.length >= 14;
-};
-
-export const toBase64Json = (payload: unknown): string =>
-  Buffer.from(JSON.stringify(payload)).toString("base64");

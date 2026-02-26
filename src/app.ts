@@ -1,111 +1,145 @@
 import express, { Request, Response } from "express";
 import {
+  AgentServiceInputError,
   buildAgentManifest,
-  buildPaymentRequiredPayload,
-  buildPaymentResponsePayload,
   getAgentServiceDescriptor,
   invokeAgentService,
   listAgentServices,
-  PAYMENT_REQUIRED_HEADER,
-  PAYMENT_RESPONSE_HEADER,
-  PAYMENT_SIGNATURE_HEADER,
-  toBase64Json,
-  verifyPaymentSignature,
+  listPaidRouteDefinitions,
 } from "./agentServices";
+import {
+  MissingPerplexityApiKeyError,
+  PerplexityApiRequestError,
+} from "./perplexitySearch";
+import { createX402PaymentMiddleware } from "./x402Middleware";
 
-const app = express();
+export interface CreateAppOptions {
+  enableX402?: boolean;
+  syncFacilitatorOnStart?: boolean;
+}
 
-app.use(express.json());
+export const createApp = (options: CreateAppOptions = {}) => {
+  const app = express();
 
-const toInputPayload = (body: unknown): Record<string, unknown> => {
-  if (typeof body === "object" && body !== null && !Array.isArray(body)) {
-    return body as Record<string, unknown>;
+  app.use(express.json());
+
+  const x402Enabled = options.enableX402 ?? process.env.X402_ENABLED !== "false";
+  if (x402Enabled) {
+    app.use(
+      createX402PaymentMiddleware(listPaidRouteDefinitions(), {
+        syncFacilitatorOnStart: options.syncFacilitatorOnStart,
+      })
+    );
   }
 
-  return { value: body };
-};
+  const toInputPayload = (body: unknown): Record<string, unknown> => {
+    if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+      return body as Record<string, unknown>;
+    }
 
-const resolveBaseUrl = (req: Request): string => {
-  const host = req.get("host");
-  if (!host) {
-    return "http://localhost:3000";
-  }
+    return { value: body };
+  };
 
-  return `${req.protocol}://${host}`;
-};
+  const resolveBaseUrl = (req: Request): string => {
+    const host = req.get("host");
+    if (!host) {
+      return "http://localhost:3000";
+    }
 
-app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "Hello from web4-service!" });
-});
+    return `${req.protocol}://${host}`;
+  };
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
-
-app.get("/agent/services", (_req: Request, res: Response) => {
-  res.json({
-    protocol: "x402-ready",
-    services: listAgentServices(),
+  app.get("/", (_req: Request, res: Response) => {
+    res.json({ message: "Hello from web4-service!" });
   });
-});
 
-app.get("/.well-known/agent-services", (req: Request, res: Response) => {
-  res.json(buildAgentManifest(resolveBaseUrl(req)));
-});
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok", uptime: process.uptime() });
+  });
 
-app.post("/agent/services/:serviceId/invoke", (req: Request, res: Response) => {
-  const rawServiceId = req.params.serviceId;
-  const serviceId = Array.isArray(rawServiceId) ? rawServiceId[0] : rawServiceId;
-  if (!serviceId) {
-    res.status(400).json({ error: "invalid_service_id" });
-    return;
-  }
+  app.get("/agent/services", (_req: Request, res: Response) => {
+    res.json({
+      protocol: "x402-ready",
+      x402Enabled,
+      services: listAgentServices(),
+    });
+  });
 
-  const service = getAgentServiceDescriptor(serviceId);
+  app.get("/.well-known/agent-services", (req: Request, res: Response) => {
+    res.json(buildAgentManifest(resolveBaseUrl(req)));
+  });
 
-  if (!service) {
-    res.status(404).json({ error: "service_not_found", serviceId });
-    return;
-  }
-
-  if (service.payment) {
-    const paymentSignature = req.get(PAYMENT_SIGNATURE_HEADER) ?? "";
-    if (!verifyPaymentSignature(paymentSignature)) {
-      const paymentRequired = buildPaymentRequiredPayload(serviceId);
-      if (paymentRequired) {
-        res.setHeader(PAYMENT_REQUIRED_HEADER, toBase64Json(paymentRequired));
+  app.post(
+    "/agent/services/:serviceId/invoke",
+    async (req: Request, res: Response) => {
+      const rawServiceId = req.params.serviceId;
+      const serviceId = Array.isArray(rawServiceId)
+        ? rawServiceId[0]
+        : rawServiceId;
+      if (!serviceId) {
+        res.status(400).json({ error: "invalid_service_id" });
+        return;
       }
 
-      res.status(402).json({
-        error: "payment_required",
-        serviceId,
-        payment: paymentRequired,
-      });
-      return;
+      const service = getAgentServiceDescriptor(serviceId);
+
+      if (!service) {
+        res.status(404).json({ error: "service_not_found", serviceId });
+        return;
+      }
+
+      try {
+        const output = await invokeAgentService(serviceId, toInputPayload(req.body));
+        if (!output) {
+          res.status(500).json({
+            error: "service_execution_error",
+            serviceId,
+          });
+          return;
+        }
+
+        res.json({
+          serviceId,
+          output,
+        });
+      } catch (error) {
+        if (error instanceof AgentServiceInputError) {
+          res.status(400).json({
+            error: "invalid_service_input",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof MissingPerplexityApiKeyError) {
+          res.status(503).json({
+            error: "service_unavailable",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof PerplexityApiRequestError) {
+          res.status(502).json({
+            error: "upstream_request_failed",
+            serviceId,
+            upstreamStatusCode: error.statusCode,
+          });
+          return;
+        }
+
+        res.status(500).json({
+          error: "service_execution_error",
+          serviceId,
+        });
+      }
     }
+  );
 
-    const paymentResponse = buildPaymentResponsePayload(
-      serviceId,
-      paymentSignature
-    );
-    if (paymentResponse) {
-      res.setHeader(PAYMENT_RESPONSE_HEADER, toBase64Json(paymentResponse));
-    }
-  }
+  return app;
+};
 
-  const output = invokeAgentService(serviceId, toInputPayload(req.body));
-  if (!output) {
-    res.status(500).json({
-      error: "service_execution_error",
-      serviceId,
-    });
-    return;
-  }
-
-  res.json({
-    serviceId,
-    output,
-  });
-});
-
+const app = createApp();
 export default app;
