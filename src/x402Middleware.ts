@@ -1,7 +1,13 @@
-import { HTTPFacilitatorClient, type RoutesConfig } from "@x402/core/server";
-import { type Network } from "@x402/core/types";
-import { ExactEvmScheme } from "@x402/evm/exact/server";
-import { paymentMiddleware, x402ResourceServer } from "@x402/express";
+import {
+  HTTPFacilitatorClient,
+  type RouteConfig,
+  type RoutesConfig,
+} from "@x402/core/dist/cjs/server/index.js";
+import { ExactEvmScheme } from "@x402/evm/dist/cjs/exact/server/index.js";
+import {
+  paymentMiddleware,
+  x402ResourceServer,
+} from "@x402/express/dist/cjs/index.js";
 import type { RequestHandler } from "express";
 import type { PaidRouteDefinition } from "./agentServices";
 
@@ -13,7 +19,7 @@ const toRoutesConfig = (
   paidRoutes: PaidRouteDefinition[],
   network: string
 ): RoutesConfig =>
-  paidRoutes.reduce<RoutesConfig>((accumulator, route) => {
+  paidRoutes.reduce<Record<string, RouteConfig>>((accumulator, route) => {
     const routeKey = `${route.method} ${route.path}`;
     accumulator[routeKey] = {
       accepts: {
@@ -41,7 +47,7 @@ export const createX402PaymentMiddleware = (
   paidRoutes: PaidRouteDefinition[],
   options?: CreateX402MiddlewareOptions
 ): RequestHandler => {
-  const network = (process.env.X402_NETWORK ?? "eip155:84532") as Network;
+  const network = process.env.X402_NETWORK ?? "eip155:84532";
   const facilitatorUrl =
     process.env.X402_FACILITATOR_URL ?? "https://facilitator.x402.org";
 
