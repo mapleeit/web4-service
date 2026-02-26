@@ -44,7 +44,9 @@ export const createX402PaymentMiddleware = (
   paidRoutes: PaidRouteDefinition[],
   options?: CreateX402MiddlewareOptions
 ): RequestHandler => {
-  const network = process.env.X402_NETWORK ?? "eip155:84532";
+  const network = (
+    process.env.X402_NETWORK ?? "eip155:84532"
+  ) as `${string}:${string}`;
   const facilitatorUrl =
     process.env.X402_FACILITATOR_URL ?? "https://facilitator.x402.org";
 
