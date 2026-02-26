@@ -2,12 +2,9 @@ import {
   HTTPFacilitatorClient,
   type RouteConfig,
   type RoutesConfig,
-} from "@x402/core/dist/cjs/server/index.js";
-import { ExactEvmScheme } from "@x402/evm/dist/cjs/exact/server/index.js";
-import {
-  paymentMiddleware,
-  x402ResourceServer,
-} from "@x402/express/dist/cjs/index.js";
+} from "@x402/core/server";
+import { ExactEvmScheme } from "@x402/evm/exact/server";
+import { paymentMiddleware, x402ResourceServer } from "@x402/express";
 import type { RequestHandler } from "express";
 import type { PaidRouteDefinition } from "./agentServices";
 
