@@ -2,7 +2,7 @@ import { runPerplexitySearch } from "./perplexitySearch";
 
 export interface X402PaymentTerms {
   scheme: "exact";
-  network: string;
+  network: `${string}:${string}`;
   asset: "USDC";
   price: string;
   payTo: string;
@@ -42,7 +42,9 @@ interface AgentService extends AgentServiceDescriptor {
 const defaultPayToAddress =
   process.env.X402_PAY_TO ??
   "0x000000000000000000000000000000000000dEaD";
-const defaultNetwork = process.env.X402_NETWORK ?? "eip155:84532";
+const defaultNetwork = (
+  process.env.X402_NETWORK ?? "eip155:84532"
+) as `${string}:${string}`;
 const defaultPrice = process.env.X402_PRICE ?? "$0.02";
 const defaultFacilitator =
   process.env.X402_FACILITATOR_URL ?? "https://facilitator.x402.org";
