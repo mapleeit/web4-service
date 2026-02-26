@@ -15,6 +15,7 @@ afterEach(() => {
   setFetchMock(originalFetch);
   delete process.env.PERPLEXITY_API_KEY;
   delete process.env.PERPLEXITY_MODEL;
+  delete process.env.X402_FACILITATOR_URL;
 });
 
 describe("GET /", () => {
@@ -82,9 +83,10 @@ describe("POST /agent/services/:serviceId/invoke", () => {
   });
 
   it("returns 402 for paid services when x402 middleware is enabled", async () => {
+    process.env.X402_FACILITATOR_URL = "https://x402.org/facilitator";
     const app = createApp({
       enableX402: true,
-      syncFacilitatorOnStart: false,
+      syncFacilitatorOnStart: true,
     });
 
     const res = await request(app)

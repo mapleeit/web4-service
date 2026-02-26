@@ -68,4 +68,4 @@ curl -i -X POST http://localhost:3000/agent/services/perplexity-search/invoke \
 - `X402_ENABLED` - set `false` to bypass paywall (useful for local tests)
 - `X402_NETWORK` - payment network identifier (default: `eip155:84532`)
 - `X402_PRICE` - paid route price string (default: `$0.02`)
-- `X402_FACILITATOR_URL` - facilitator URL (default: `https://facilitator.x402.org`)
+- `X402_FACILITATOR_URL` - facilitator URL (default: `https://x402.org/facilitator`)

@@ -47,7 +47,7 @@ const defaultNetwork = (
 ) as `${string}:${string}`;
 const defaultPrice = process.env.X402_PRICE ?? "$0.02";
 const defaultFacilitator =
-  process.env.X402_FACILITATOR_URL ?? "https://facilitator.x402.org";
+  process.env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator";
 
 const asNonEmptyString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
