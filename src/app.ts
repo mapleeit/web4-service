@@ -1,15 +1,145 @@
 import express, { Request, Response } from "express";
+import {
+  AgentServiceInputError,
+  buildAgentManifest,
+  getAgentServiceDescriptor,
+  invokeAgentService,
+  listAgentServices,
+  listPaidRouteDefinitions,
+} from "./agentServices";
+import {
+  MissingPerplexityApiKeyError,
+  PerplexityApiRequestError,
+} from "./perplexitySearch";
+import { createX402PaymentMiddleware } from "./x402Middleware";
 
-const app = express();
+export interface CreateAppOptions {
+  enableX402?: boolean;
+  syncFacilitatorOnStart?: boolean;
+}
 
-app.use(express.json());
+export const createApp = (options: CreateAppOptions = {}) => {
+  const app = express();
 
-app.get("/", (_req: Request, res: Response) => {
-  res.json({ message: "Hello from web4-service!" });
-});
+  app.use(express.json());
 
-app.get("/health", (_req: Request, res: Response) => {
-  res.json({ status: "ok", uptime: process.uptime() });
-});
+  const x402Enabled = options.enableX402 ?? process.env.X402_ENABLED !== "false";
+  if (x402Enabled) {
+    app.use(
+      createX402PaymentMiddleware(listPaidRouteDefinitions(), {
+        syncFacilitatorOnStart: options.syncFacilitatorOnStart,
+      })
+    );
+  }
 
+  const toInputPayload = (body: unknown): Record<string, unknown> => {
+    if (typeof body === "object" && body !== null && !Array.isArray(body)) {
+      return body as Record<string, unknown>;
+    }
+
+    return { value: body };
+  };
+
+  const resolveBaseUrl = (req: Request): string => {
+    const host = req.get("host");
+    if (!host) {
+      return "http://localhost:3000";
+    }
+
+    return `${req.protocol}://${host}`;
+  };
+
+  app.get("/", (_req: Request, res: Response) => {
+    res.json({ message: "Hello from web4-service!" });
+  });
+
+  app.get("/health", (_req: Request, res: Response) => {
+    res.json({ status: "ok", uptime: process.uptime() });
+  });
+
+  app.get("/agent/services", (_req: Request, res: Response) => {
+    res.json({
+      protocol: "x402-ready",
+      x402Enabled,
+      services: listAgentServices(),
+    });
+  });
+
+  app.get("/.well-known/agent-services", (req: Request, res: Response) => {
+    res.json(buildAgentManifest(resolveBaseUrl(req)));
+  });
+
+  app.post(
+    "/agent/services/:serviceId/invoke",
+    async (req: Request, res: Response) => {
+      const rawServiceId = req.params.serviceId;
+      const serviceId = Array.isArray(rawServiceId)
+        ? rawServiceId[0]
+        : rawServiceId;
+      if (!serviceId) {
+        res.status(400).json({ error: "invalid_service_id" });
+        return;
+      }
+
+      const service = getAgentServiceDescriptor(serviceId);
+
+      if (!service) {
+        res.status(404).json({ error: "service_not_found", serviceId });
+        return;
+      }
+
+      try {
+        const output = await invokeAgentService(serviceId, toInputPayload(req.body));
+        if (!output) {
+          res.status(500).json({
+            error: "service_execution_error",
+            serviceId,
+          });
+          return;
+        }
+
+        res.json({
+          serviceId,
+          output,
+        });
+      } catch (error) {
+        if (error instanceof AgentServiceInputError) {
+          res.status(400).json({
+            error: "invalid_service_input",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof MissingPerplexityApiKeyError) {
+          res.status(503).json({
+            error: "service_unavailable",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof PerplexityApiRequestError) {
+          res.status(502).json({
+            error: "upstream_request_failed",
+            serviceId,
+            upstreamStatusCode: error.statusCode,
+          });
+          return;
+        }
+
+        res.status(500).json({
+          error: "service_execution_error",
+          serviceId,
+        });
+      }
+    }
+  );
+
+  return app;
+};
+
+const app = createApp();
 export default app;
