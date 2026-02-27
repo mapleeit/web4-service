@@ -48,7 +48,8 @@ interface AgentService extends AgentServiceDescriptor {
 }
 
 const DEFAULT_X402_PRICE = "$0.02";
-const DEFAULT_X402_FACILITATOR = "https://facilitator.openx402.ai";
+const DEFAULT_X402_FACILITATOR =
+  "https://api.cdp.coinbase.com/platform/v2/x402";
 
 const asNonEmptyString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {
