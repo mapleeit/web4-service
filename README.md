@@ -95,7 +95,7 @@ All networks must be EVM CAIP-2 identifiers supported by your configured facilit
 - `OPENROUTER_APP_NAME` - optional OpenRouter app name header (`X-Title`)
 - `X402_ENABLED` - set `false` to bypass paywall (useful for local tests)
 - `X402_PRICE` - service price, applies to all payment networks (default: `$0.02`)
-- `X402_FACILITATOR_URL` - fallback facilitator URL (default: `https://x402.org/facilitator`)
+- `X402_FACILITATOR_URL` - facilitator URL (default: `https://facilitator.openx402.ai`)
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.

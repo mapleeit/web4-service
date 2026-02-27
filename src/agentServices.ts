@@ -48,7 +48,7 @@ interface AgentService extends AgentServiceDescriptor {
 }
 
 const DEFAULT_X402_PRICE = "$0.02";
-const DEFAULT_X402_FACILITATOR = "https://x402.org/facilitator";
+const DEFAULT_X402_FACILITATOR = "https://facilitator.openx402.ai";
 
 const asNonEmptyString = (value: unknown): string | undefined => {
   if (typeof value !== "string") {

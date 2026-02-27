@@ -196,14 +196,8 @@ describe("POST /agent/services/:serviceId/invoke", () => {
     expect(typeof res.body.output.echoedAt).toBe("string");
   });
 
-  // Skipped: x402.org facilitator does not yet support "exact" scheme on eip155:8453 (Base Mainnet).
-  // Re-enable once the facilitator adds mainnet support.
-  it.skip("returns 402 for paid services when x402 middleware is enabled", async () => {
-    process.env.X402_FACILITATOR_URL = "https://x402.org/facilitator";
-    const app = createApp({
-      enableX402: true,
-      syncFacilitatorOnStart: false,
-    });
+  it("returns 402 for paid services when x402 middleware is enabled", async () => {
+    const app = createApp({ enableX402: true });
 
     const res = await request(app)
       .post("/agent/services/perplexity-search/invoke")

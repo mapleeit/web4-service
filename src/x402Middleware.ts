@@ -76,7 +76,7 @@ export const createX402PaymentMiddleware = (
 ): RequestHandler => {
   const networksToRegister = collectRegisteredNetworks(paidRoutes);
   const facilitatorUrl =
-    process.env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator";
+    process.env.X402_FACILITATOR_URL ?? "https://facilitator.openx402.ai";
 
   const facilitatorClient = new HTTPFacilitatorClient({
     url: facilitatorUrl,
