@@ -77,7 +77,7 @@ export const createX402PaymentMiddleware = (
   const networksToRegister = collectRegisteredNetworks(paidRoutes);
   const facilitatorUrl =
     process.env.X402_FACILITATOR_URL ??
-    "https://api.cdp.coinbase.com/platform/v2/x402";
+    "https://facilitator.payai.network";
 
   const facilitatorClient = new HTTPFacilitatorClient({
     url: facilitatorUrl,
