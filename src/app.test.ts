@@ -15,6 +15,12 @@ afterEach(() => {
   setFetchMock(originalFetch);
   delete process.env.PERPLEXITY_API_KEY;
   delete process.env.PERPLEXITY_MODEL;
+  delete process.env.PERPLEXITY_API_PROVIDER;
+  delete process.env.PERPLEXITY_CHAT_COMPLETIONS_URL;
+  delete process.env.OPENROUTER_API_KEY;
+  delete process.env.OPENROUTER_CHAT_COMPLETIONS_URL;
+  delete process.env.OPENROUTER_HTTP_REFERER;
+  delete process.env.OPENROUTER_APP_NAME;
   delete process.env.X402_FACILITATOR_URL;
 });
 
@@ -135,6 +141,70 @@ describe("POST /agent/services/:serviceId/invoke", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("routes Perplexity search through OpenRouter when configured", async () => {
+    process.env.PERPLEXITY_API_PROVIDER = "openrouter";
+    process.env.OPENROUTER_API_KEY = "openrouter-key";
+    process.env.OPENROUTER_HTTP_REFERER = "https://example.com";
+    process.env.OPENROUTER_APP_NAME = "web4-service-tests";
+
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            model: "perplexity/sonar-pro",
+            citations: ["https://openrouter.ai/docs/overview/models"],
+            choices: [
+              {
+                message: {
+                  content: "x402 can be used with paid API workflows.",
+                },
+              },
+            ],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json" },
+          }
+        )
+      );
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/perplexity-search/invoke")
+      .send({ query: "what is x402?" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.serviceId).toBe("perplexity-search");
+    expect(res.body.output.answer).toContain("x402");
+    expect(res.body.output.citations).toEqual([
+      "https://openrouter.ai/docs/overview/models",
+    ]);
+    expect(res.body.output.model).toBe("perplexity/sonar-pro");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    const requestUrl = fetchMock.mock.calls[0][0] as string;
+    const requestInit = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(requestUrl).toBe("https://openrouter.ai/api/v1/chat/completions");
+    expect(requestInit.method).toBe("POST");
+    expect(requestInit.headers).toEqual(
+      expect.objectContaining({
+        Authorization: "Bearer openrouter-key",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://example.com",
+        "X-Title": "web4-service-tests",
+      })
+    );
+
+    const requestBody = JSON.parse(String(requestInit.body)) as {
+      model: string;
+      messages: Array<{ content: string }>;
+    };
+    expect(requestBody.model).toBe("perplexity/sonar-pro");
+    expect(requestBody.messages[1].content).toBe("what is x402?");
+  });
+
   it("returns 503 when Perplexity API key is missing", async () => {
     const app = createApp({ enableX402: false });
     const res = await request(app)
@@ -143,6 +213,18 @@ describe("POST /agent/services/:serviceId/invoke", () => {
 
     expect(res.status).toBe(503);
     expect(res.body.error).toBe("service_unavailable");
+  });
+
+  it("returns 503 when OpenRouter key is missing for OpenRouter provider", async () => {
+    process.env.PERPLEXITY_API_PROVIDER = "openrouter";
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/perplexity-search/invoke")
+      .send({ query: "web4.ai" });
+
+    expect(res.status).toBe(503);
+    expect(res.body.error).toBe("service_unavailable");
+    expect(res.body.message).toContain("OPENROUTER_API_KEY");
   });
 
   it("returns 502 when Perplexity API returns an error", async () => {

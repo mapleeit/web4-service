@@ -34,7 +34,7 @@ npm run dev
 - Route: `POST /agent/services/perplexity-search/invoke`
 - Input:
   - `query` (required)
-  - `model` (optional, defaults to `PERPLEXITY_MODEL` or `sonar-pro`)
+  - `model` (optional, defaults to `PERPLEXITY_MODEL` or provider default model)
 - Output:
   - `answer`
   - `citations`
@@ -59,13 +59,23 @@ curl -i -X POST http://localhost:3000/agent/services/perplexity-search/invoke \
 
 ## Required environment
 
-- `PERPLEXITY_API_KEY` - API key for Perplexity
+- One provider API key:
+  - `PERPLEXITY_API_KEY` - API key for direct Perplexity API calls
+  - `OPENROUTER_API_KEY` - API key when using OpenRouter as Perplexity proxy
 - `X402_PAY_TO` - wallet address that receives payment
 
 ## Optional environment
 
-- `PERPLEXITY_MODEL` - default model (`sonar-pro`, `sonar`, etc.)
+- `PERPLEXITY_API_PROVIDER` - `perplexity` (default) or `openrouter`
+- `PERPLEXITY_MODEL` - default model override
+- `PERPLEXITY_CHAT_COMPLETIONS_URL` - override Perplexity chat completions URL
+- `OPENROUTER_CHAT_COMPLETIONS_URL` - override OpenRouter chat completions URL (default: `https://openrouter.ai/api/v1/chat/completions`)
+- `OPENROUTER_HTTP_REFERER` - optional OpenRouter attribution header
+- `OPENROUTER_APP_NAME` - optional OpenRouter app name header (`X-Title`)
 - `X402_ENABLED` - set `false` to bypass paywall (useful for local tests)
 - `X402_NETWORK` - payment network identifier (default: `eip155:84532`)
 - `X402_PRICE` - paid route price string (default: `$0.02`)
 - `X402_FACILITATOR_URL` - facilitator URL (default: `https://x402.org/facilitator`)
+
+When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
+`perplexity/sonar-pro` or `perplexity/sonar`.

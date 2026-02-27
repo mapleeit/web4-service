@@ -1,5 +1,9 @@
 const PERPLEXITY_CHAT_COMPLETIONS_URL =
   "https://api.perplexity.ai/chat/completions";
+const OPENROUTER_CHAT_COMPLETIONS_URL =
+  "https://openrouter.ai/api/v1/chat/completions";
+
+type PerplexityProvider = "perplexity" | "openrouter";
 
 export interface PerplexitySearchInput {
   query: string;
@@ -17,8 +21,12 @@ interface PerplexityChatResponse {
 }
 
 export class MissingPerplexityApiKeyError extends Error {
-  constructor() {
-    super("PERPLEXITY_API_KEY is required to use perplexity-search");
+  constructor(provider: PerplexityProvider = "perplexity") {
+    super(
+      provider === "openrouter"
+        ? "OPENROUTER_API_KEY is required when PERPLEXITY_API_PROVIDER=openrouter"
+        : "PERPLEXITY_API_KEY is required to use perplexity-search"
+    );
     this.name = "MissingPerplexityApiKeyError";
   }
 }
@@ -43,6 +51,89 @@ const toStringArray = (value: unknown): string[] => {
   return value.filter((item): item is string => typeof item === "string");
 };
 
+const asNonEmptyString = (value: string | undefined): string | undefined => {
+  if (!value) {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+};
+
+interface SearchProviderConfig {
+  provider: PerplexityProvider;
+  apiKey: string;
+  completionsUrl: string;
+  defaultModel: string;
+  headers: Record<string, string>;
+}
+
+const resolvePerplexityProvider = (): PerplexityProvider => {
+  const configuredProvider = asNonEmptyString(
+    process.env.PERPLEXITY_API_PROVIDER
+  )?.toLowerCase();
+
+  if (configuredProvider === "openrouter") {
+    return "openrouter";
+  }
+
+  if (configuredProvider === "perplexity") {
+    return "perplexity";
+  }
+
+  if (asNonEmptyString(process.env.PERPLEXITY_API_KEY)) {
+    return "perplexity";
+  }
+
+  if (asNonEmptyString(process.env.OPENROUTER_API_KEY)) {
+    return "openrouter";
+  }
+
+  return "perplexity";
+};
+
+const resolveSearchProviderConfig = (): SearchProviderConfig => {
+  const provider = resolvePerplexityProvider();
+
+  if (provider === "openrouter") {
+    const apiKey = asNonEmptyString(process.env.OPENROUTER_API_KEY);
+    if (!apiKey) {
+      throw new MissingPerplexityApiKeyError(provider);
+    }
+
+    const httpReferer = asNonEmptyString(process.env.OPENROUTER_HTTP_REFERER);
+    const appName = asNonEmptyString(process.env.OPENROUTER_APP_NAME);
+
+    return {
+      provider,
+      apiKey,
+      completionsUrl:
+        asNonEmptyString(process.env.OPENROUTER_CHAT_COMPLETIONS_URL) ??
+        OPENROUTER_CHAT_COMPLETIONS_URL,
+      defaultModel: "perplexity/sonar-pro",
+      headers: {
+        ...(httpReferer ? { "HTTP-Referer": httpReferer } : {}),
+        ...(appName ? { "X-Title": appName } : {}),
+      },
+    };
+  }
+
+  const apiKey = asNonEmptyString(process.env.PERPLEXITY_API_KEY);
+  if (!apiKey) {
+    throw new MissingPerplexityApiKeyError(provider);
+  }
+
+  return {
+    provider,
+    apiKey,
+    completionsUrl:
+      asNonEmptyString(process.env.PERPLEXITY_CHAT_COMPLETIONS_URL) ??
+      PERPLEXITY_CHAT_COMPLETIONS_URL,
+    defaultModel: "sonar-pro",
+    headers: {},
+  };
+};
+
 export const runPerplexitySearch = async (
   input: PerplexitySearchInput
 ): Promise<{
@@ -50,12 +141,9 @@ export const runPerplexitySearch = async (
   citations: string[];
   model: string;
 }> => {
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    throw new MissingPerplexityApiKeyError();
-  }
-
-  const model = input.model ?? process.env.PERPLEXITY_MODEL ?? "sonar-pro";
+  const providerConfig = resolveSearchProviderConfig();
+  const model =
+    input.model ?? process.env.PERPLEXITY_MODEL ?? providerConfig.defaultModel;
   const requestBody = {
     model,
     messages: [
@@ -71,11 +159,12 @@ export const runPerplexitySearch = async (
     ],
   };
 
-  const response = await fetch(PERPLEXITY_CHAT_COMPLETIONS_URL, {
+  const response = await fetch(providerConfig.completionsUrl, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      Authorization: `Bearer ${providerConfig.apiKey}`,
       "Content-Type": "application/json",
+      ...providerConfig.headers,
     },
     body: JSON.stringify(requestBody),
   });
