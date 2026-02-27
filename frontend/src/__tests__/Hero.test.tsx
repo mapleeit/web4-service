@@ -21,9 +21,9 @@ describe("Hero", () => {
     expect(screen.getByText("Agent Services")).toBeInTheDocument();
   });
 
-  it("renders the service URL", () => {
+  it("renders the curl command", () => {
     render(<Hero />);
-    expect(screen.getByText("GET /agent/services")).toBeInTheDocument();
+    expect(screen.getByText(/curl .+\/agent\/services/)).toBeInTheDocument();
   });
 
   it("shows Copied! after clicking copy button", async () => {

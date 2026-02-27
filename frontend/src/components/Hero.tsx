@@ -2,10 +2,11 @@ import { useState } from "react";
 
 export default function Hero() {
   const [copied, setCopied] = useState(false);
-  const serviceUrl = "GET /agent/services";
+
+  const curlCommand = `curl ${window.location.origin}/agent/services`;
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(serviceUrl);
+    await navigator.clipboard.writeText(curlCommand);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -37,7 +38,7 @@ export default function Hero() {
         <div className="mb-8 flex items-center justify-center">
           <div className="flex items-center gap-3 rounded-xl border border-[var(--color-border)] bg-zinc-900/60 px-5 py-3 font-mono text-sm">
             <span className="text-zinc-500">$</span>
-            <code className="text-zinc-200">{serviceUrl}</code>
+            <code className="text-zinc-200">{curlCommand}</code>
             <button
               onClick={handleCopy}
               className="ml-2 rounded-md border border-[var(--color-border)] px-2.5 py-1 text-xs text-zinc-400 transition-all hover:border-[var(--color-border-hover)] hover:text-zinc-200"
