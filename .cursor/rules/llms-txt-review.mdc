@@ -1,0 +1,23 @@
+---
+description: Ensure llms.txt stays in sync with API changes
+alwaysApply: true
+---
+
+# llms.txt Sync Check
+
+After any change to API endpoints, services, pricing, request/response formats, or payment configuration, you MUST review and update `frontend/public/llms.txt` to keep it accurate.
+
+## Checklist
+
+- All API endpoints listed with correct HTTP methods and paths
+- Service names, descriptions, and pricing match the code
+- Request input fields and response output format (including the `{ serviceId, output }` wrapper) are correct
+- Payment flow description matches actual x402 middleware behavior
+- No hardcoded values that should be dynamic (e.g., supported networks come from config)
+
+## Key source files to cross-reference
+
+- `src/app.ts` — route definitions
+- `src/agentServices.ts` — service catalog, pricing, schemas
+- `src/perplexitySearch.ts` — search service implementation
+- `src/x402Middleware.ts` — payment middleware
