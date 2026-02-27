@@ -28,12 +28,12 @@ export default function Header() {
             </a>
           ))}
           <a
-            href="https://docs.payai.network/x402/quickstart"
+            href="https://github.com/mapleeit/web4-service"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            Docs
+            GitHub
           </a>
         </nav>
 
@@ -61,12 +61,12 @@ export default function Header() {
             </a>
           ))}
           <a
-            href="https://docs.payai.network/x402/quickstart"
+            href="https://github.com/mapleeit/web4-service"
             target="_blank"
             rel="noopener noreferrer"
             className="block py-2 text-sm font-medium text-zinc-400 transition-colors hover:text-zinc-100"
           >
-            Docs
+            GitHub
           </a>
         </nav>
       )}

@@ -15,10 +15,11 @@ describe("Header", () => {
     expect(screen.getByText("Playground")).toBeInTheDocument();
   });
 
-  it("renders docs link pointing externally", () => {
+  it("renders GitHub link pointing externally", () => {
     render(<Header />);
-    const docsLinks = screen.getAllByText("Docs");
-    const desktopLink = docsLinks[0]!;
+    const githubLinks = screen.getAllByText("GitHub");
+    const desktopLink = githubLinks[0]!;
+    expect(desktopLink.closest("a")).toHaveAttribute("href", "https://github.com/mapleeit/web4-service");
     expect(desktopLink.closest("a")).toHaveAttribute("target", "_blank");
   });
 });

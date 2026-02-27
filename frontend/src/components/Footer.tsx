@@ -13,15 +13,7 @@ export default function Footer() {
 
         <div className="flex items-center gap-6">
           <a
-            href="https://docs.payai.network/x402/quickstart"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
-          >
-            Documentation
-          </a>
-          <a
-            href="https://github.com"
+            href="https://github.com/mapleeit/web4-service"
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
