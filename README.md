@@ -90,6 +90,8 @@ Example `X402_PAYMENT_OPTIONS`:
 
 When multiple x402 payment options are configured, `payment-required` includes
 multiple `accepts` entries so clients can pay on a chain where they have funds.
+All configured networks must be EVM CAIP-2 identifiers and supported by your
+configured facilitator.
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.

@@ -55,14 +55,14 @@ const asNonEmptyString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const parseCaip2Network = (
+const parseEvmCaip2Network = (
   value: string,
   source: string
 ): `${string}:${string}` => {
   const normalized = value.trim();
-  if (!normalized.includes(":")) {
+  if (!normalized.startsWith("eip155:")) {
     throw new Error(
-      `${source} must be in CAIP-2 format (e.g. eip155:84532), received: ${value}`
+      `${source} must use an EVM CAIP-2 network (e.g. eip155:84532), received: ${value}`
     );
   }
 
@@ -134,7 +134,10 @@ const parsePaymentTermsFromJson = (defaults: {
 
     return {
       scheme: "exact" as const,
-      network: parseCaip2Network(networkRaw, `X402_PAYMENT_OPTIONS[${index}]`),
+      network: parseEvmCaip2Network(
+        networkRaw,
+        `X402_PAYMENT_OPTIONS[${index}]`
+      ),
       asset: "USDC" as const,
       price: asNonEmptyString(option.price) ?? defaults.price,
       payTo: asNonEmptyString(option.payTo) ?? defaults.payTo,
@@ -155,7 +158,7 @@ const parseNetworksFromEnv = (): `${string}:${string}`[] => {
     .split(",")
     .map((network) => asNonEmptyString(network))
     .filter((network): network is string => Boolean(network))
-    .map((network) => parseCaip2Network(network, "X402_NETWORKS"));
+    .map((network) => parseEvmCaip2Network(network, "X402_NETWORKS"));
 
   return Array.from(new Set(parsedNetworks));
 };
@@ -181,7 +184,7 @@ const resolvePaymentTerms = (): {
   }
 
   const configuredNetworks = parseNetworksFromEnv();
-  const fallbackNetwork = parseCaip2Network(
+  const fallbackNetwork = parseEvmCaip2Network(
     asNonEmptyString(process.env.X402_NETWORK) ?? DEFAULT_X402_NETWORK,
     "X402_NETWORK"
   );

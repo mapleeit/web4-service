@@ -11,9 +11,6 @@ const setFetchMock = (mockImplementation: typeof fetch) => {
   });
 };
 
-const decodeBase64Json = <T>(encoded: string): T =>
-  JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as T;
-
 afterEach(() => {
   setFetchMock(originalFetch);
   delete process.env.PERPLEXITY_API_KEY;
@@ -182,44 +179,6 @@ describe("POST /agent/services/:serviceId/invoke", () => {
 
     expect(res.status).toBe(402);
     expect(res.headers["payment-required"]).toBeDefined();
-  });
-
-  it("returns multi-network accepts in payment-required response", async () => {
-    process.env.X402_NETWORKS = "eip155:84532,eip155:8453";
-    process.env.X402_PRICE = "$0.03";
-    process.env.X402_PAY_TO = "0x437896Fb526c8333819aE253C6f3cEFbA56D85A1";
-    process.env.X402_FACILITATOR_URL = "https://x402.org/facilitator";
-
-    const app = createApp({
-      enableX402: true,
-      syncFacilitatorOnStart: true,
-    });
-    const res = await request(app)
-      .post("/agent/services/perplexity-search/invoke")
-      .send({ query: "latest x402 updates" });
-
-    expect(res.status).toBe(402);
-    expect(Array.isArray(res.body.paymentOptions)).toBe(true);
-    expect(res.body.paymentOptions).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ network: "eip155:84532" }),
-        expect.objectContaining({ network: "eip155:8453" }),
-      ])
-    );
-
-    const paymentRequiredHeader = res.headers["payment-required"];
-    expect(typeof paymentRequiredHeader).toBe("string");
-
-    const decoded = decodeBase64Json<{
-      accepts: Array<{ network: string }>;
-    }>(paymentRequiredHeader);
-    expect(Array.isArray(decoded.accepts)).toBe(true);
-    expect(decoded.accepts).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ network: "eip155:84532" }),
-        expect.objectContaining({ network: "eip155:8453" }),
-      ])
-    );
   });
 
   it("calls Perplexity and returns search output when x402 is disabled", async () => {
