@@ -12,9 +12,8 @@ export default function Header() {
   return (
     <header className="fixed top-0 z-50 w-full border-b border-[var(--color-border)] bg-[#09090b]/80 backdrop-blur-xl">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-6">
-        <a href="#" className="flex items-center gap-2 text-lg font-bold tracking-tight">
-          <span className="gradient-text">W4</span>
-          <span className="text-zinc-100">web4-service</span>
+        <a href="#" className="flex items-center">
+          <img src="/favicon.svg" alt="web4-service" className="h-8 w-8 rounded-lg" />
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
