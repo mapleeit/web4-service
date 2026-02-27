@@ -22,6 +22,11 @@ afterEach(() => {
   delete process.env.OPENROUTER_HTTP_REFERER;
   delete process.env.OPENROUTER_APP_NAME;
   delete process.env.X402_FACILITATOR_URL;
+  delete process.env.X402_NETWORK;
+  delete process.env.X402_NETWORKS;
+  delete process.env.X402_PRICE;
+  delete process.env.X402_PAY_TO;
+  delete process.env.X402_PAYMENT_OPTIONS;
 });
 
 describe("GET /", () => {
@@ -57,6 +62,79 @@ describe("GET /agent/services", () => {
         expect.objectContaining({
           id: "perplexity-search",
           payment: expect.objectContaining({ price: "$0.02" }),
+        }),
+      ])
+    );
+  });
+
+  it("includes multi-network payment options when configured", async () => {
+    process.env.X402_NETWORKS = "eip155:84532,eip155:8453";
+    process.env.X402_PRICE = "$0.03";
+    process.env.X402_PAY_TO = "0x437896Fb526c8333819aE253C6f3cEFbA56D85A1";
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+    expect(res.status).toBe(200);
+
+    const paidService = res.body.services.find(
+      (service: { id: string }) => service.id === "perplexity-search"
+    );
+
+    expect(paidService).toBeDefined();
+    expect(paidService.payment.network).toBe("eip155:84532");
+    expect(paidService.paymentOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          network: "eip155:84532",
+          price: "$0.03",
+        }),
+        expect.objectContaining({
+          network: "eip155:8453",
+          price: "$0.03",
+        }),
+      ])
+    );
+  });
+
+  it("supports explicit X402_PAYMENT_OPTIONS JSON overrides", async () => {
+    process.env.X402_PAYMENT_OPTIONS = JSON.stringify([
+      {
+        network: "eip155:8453",
+        payTo: "0x1111111111111111111111111111111111111111",
+        price: "$0.04",
+      },
+      {
+        network: "eip155:84532",
+        payTo: "0x2222222222222222222222222222222222222222",
+        price: "$0.02",
+      },
+    ]);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+    expect(res.status).toBe(200);
+
+    const paidService = res.body.services.find(
+      (service: { id: string }) => service.id === "perplexity-search"
+    );
+
+    expect(paidService).toBeDefined();
+    expect(paidService.payment).toEqual(
+      expect.objectContaining({
+        network: "eip155:8453",
+        payTo: "0x1111111111111111111111111111111111111111",
+        price: "$0.04",
+      })
+    );
+    expect(paidService.paymentOptions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          network: "eip155:8453",
+          payTo: "0x1111111111111111111111111111111111111111",
+        }),
+        expect.objectContaining({
+          network: "eip155:84532",
+          payTo: "0x2222222222222222222222222222222222222222",
         }),
       ])
     );

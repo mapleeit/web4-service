@@ -12,28 +12,58 @@ interface CreateX402MiddlewareOptions {
   syncFacilitatorOnStart?: boolean;
 }
 
-const toRoutesConfig = (
-  paidRoutes: PaidRouteDefinition[],
-  network: string
-): RoutesConfig =>
+const getRoutePaymentOptions = (
+  route: PaidRouteDefinition
+): PaidRouteDefinition["payment"][] =>
+  route.paymentOptions && route.paymentOptions.length > 0
+    ? route.paymentOptions
+    : [route.payment];
+
+const collectRegisteredNetworks = (
+  paidRoutes: PaidRouteDefinition[]
+): `${string}:${string}`[] => {
+  const networks = new Set<`${string}:${string}`>();
+  for (const route of paidRoutes) {
+    for (const paymentOption of getRoutePaymentOptions(route)) {
+      networks.add(paymentOption.network);
+    }
+  }
+
+  return Array.from(networks);
+};
+
+const toRoutesConfig = (paidRoutes: PaidRouteDefinition[]): RoutesConfig =>
   paidRoutes.reduce<Record<string, RouteConfig>>((accumulator, route) => {
+    const paymentOptions = getRoutePaymentOptions(route);
+    const primaryPaymentOption = paymentOptions[0];
+    const accepts = paymentOptions.map((paymentOption) => ({
+      scheme: paymentOption.scheme,
+      network: paymentOption.network,
+      payTo: paymentOption.payTo,
+      price: paymentOption.price,
+    }));
     const routeKey = `${route.method} ${route.path}`;
     accumulator[routeKey] = {
-      accepts: {
-        scheme: route.payment.scheme,
-        network: route.payment.network,
-        payTo: route.payment.payTo,
-        price: route.payment.price,
-      },
+      accepts: accepts.length === 1 ? accepts[0] : accepts,
       description: route.description,
       unpaidResponseBody: () => ({
         contentType: "application/json",
         body: {
           error: "payment_required",
           note: "This endpoint uses x402. Pay and retry the same request.",
-          network,
-          price: route.payment.price,
-          payTo: route.payment.payTo,
+          network: primaryPaymentOption.network,
+          price: primaryPaymentOption.price,
+          payTo: primaryPaymentOption.payTo,
+          ...(paymentOptions.length > 1
+            ? {
+                paymentOptions: paymentOptions.map((option) => ({
+                  network: option.network,
+                  asset: option.asset,
+                  price: option.price,
+                  payTo: option.payTo,
+                })),
+              }
+            : {}),
         },
       }),
     };
@@ -44,9 +74,11 @@ export const createX402PaymentMiddleware = (
   paidRoutes: PaidRouteDefinition[],
   options?: CreateX402MiddlewareOptions
 ): RequestHandler => {
-  const network = (
+  const fallbackNetwork = (
     process.env.X402_NETWORK ?? "eip155:84532"
   ) as `${string}:${string}`;
+  const networks = collectRegisteredNetworks(paidRoutes);
+  const networksToRegister = networks.length > 0 ? networks : [fallbackNetwork];
   const facilitatorUrl =
     process.env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator";
 
@@ -54,13 +86,13 @@ export const createX402PaymentMiddleware = (
     url: facilitatorUrl,
   });
 
-  const server = new x402ResourceServer(facilitatorClient).register(
-    network,
-    new ExactEvmScheme()
-  );
+  const server = new x402ResourceServer(facilitatorClient);
+  for (const network of networksToRegister) {
+    server.register(network, new ExactEvmScheme());
+  }
 
   return paymentMiddleware(
-    toRoutesConfig(paidRoutes, network),
+    toRoutesConfig(paidRoutes),
     server,
     undefined,
     undefined,
