@@ -37,15 +37,6 @@ afterEach(() => {
   delete process.env.X402_PAYMENT_OPTIONS;
 });
 
-describe("GET /", () => {
-  it("returns hello message", async () => {
-    const app = createApp({ enableX402: false });
-    const res = await request(app).get("/");
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ message: "Hello from web4-service!" });
-  });
-});
-
 describe("GET /health", () => {
   it("returns ok status", async () => {
     const app = createApp({ enableX402: false });

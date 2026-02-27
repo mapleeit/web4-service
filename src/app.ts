@@ -53,10 +53,7 @@ export const createApp = (options: CreateAppOptions = {}) => {
   };
 
   const frontendDist = path.join(__dirname, "../frontend/dist");
-
-  app.get("/", (_req: Request, res: Response) => {
-    res.json({ message: "Hello from web4-service!" });
-  });
+  app.use(express.static(frontendDist));
 
   app.get("/health", (_req: Request, res: Response) => {
     res.json({ status: "ok", uptime: process.uptime() });
@@ -150,8 +147,6 @@ export const createApp = (options: CreateAppOptions = {}) => {
       }
     }
   );
-
-  app.use(express.static(frontendDist));
 
   app.get("{*path}", (_req: Request, res: Response) => {
     const indexPath = path.join(frontendDist, "index.html");
