@@ -20,6 +20,7 @@ export interface CreateAppOptions {
 
 export const createApp = (options: CreateAppOptions = {}) => {
   const app = express();
+  app.set("trust proxy", true);
 
   app.use(express.json());
 
