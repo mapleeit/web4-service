@@ -1,7 +1,6 @@
 import express, { Request, Response } from "express";
 import {
   AgentServiceInputError,
-  buildAgentManifest,
   getAgentServiceDescriptor,
   invokeAgentService,
   listAgentServices,
@@ -23,10 +22,13 @@ export const createApp = (options: CreateAppOptions = {}) => {
 
   app.use(express.json());
 
+  const services = listAgentServices();
+  const paidRoutes = listPaidRouteDefinitions();
+
   const x402Enabled = options.enableX402 ?? process.env.X402_ENABLED !== "false";
   if (x402Enabled) {
     app.use(
-      createX402PaymentMiddleware(listPaidRouteDefinitions(), {
+      createX402PaymentMiddleware(paidRoutes, {
         syncFacilitatorOnStart: options.syncFacilitatorOnStart,
       })
     );
@@ -61,12 +63,20 @@ export const createApp = (options: CreateAppOptions = {}) => {
     res.json({
       protocol: "x402-ready",
       x402Enabled,
-      services: listAgentServices(),
+      services,
     });
   });
 
   app.get("/.well-known/agent-services", (req: Request, res: Response) => {
-    res.json(buildAgentManifest(resolveBaseUrl(req)));
+    const normalizedBaseUrl = resolveBaseUrl(req).replace(/\/$/, "");
+    res.json({
+      name: "web4-service-agent-catalog",
+      protocols: ["http", "x402"],
+      services: services.map((service) => ({
+        ...service,
+        endpoint: `${normalizedBaseUrl}${service.endpoint}`,
+      })),
+    });
   });
 
   app.post(
@@ -140,6 +150,3 @@ export const createApp = (options: CreateAppOptions = {}) => {
 
   return app;
 };
-
-const app = createApp();
-export default app;

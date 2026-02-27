@@ -1,5 +1,11 @@
 import { runPerplexitySearch } from "./perplexitySearch";
 
+interface PaymentOption {
+  network: `${string}:${string}`;
+  payTo: string;
+  facilitator: string;
+}
+
 export interface X402PaymentTerms {
   scheme: "exact";
   network: `${string}:${string}`;
@@ -41,8 +47,6 @@ interface AgentService extends AgentServiceDescriptor {
   ) => Record<string, unknown> | Promise<Record<string, unknown>>;
 }
 
-const DEFAULT_X402_PAY_TO = "0x000000000000000000000000000000000000dEaD";
-const DEFAULT_X402_NETWORK = "eip155:84532";
 const DEFAULT_X402_PRICE = "$0.02";
 const DEFAULT_X402_FACILITATOR = "https://x402.org/facilitator";
 
@@ -55,25 +59,9 @@ const asNonEmptyString = (value: unknown): string | undefined => {
   return trimmed.length > 0 ? trimmed : undefined;
 };
 
-const parseEvmCaip2Network = (
-  value: string,
-  source: string
-): `${string}:${string}` => {
-  const normalized = value.trim();
-  if (!normalized.startsWith("eip155:")) {
-    throw new Error(
-      `${source} must use an EVM CAIP-2 network (e.g. eip155:84532), received: ${value}`
-    );
-  }
-
-  return normalized as `${string}:${string}`;
-};
-
-const dedupePaymentTermsByNetwork = (
-  paymentTerms: X402PaymentTerms[]
-): X402PaymentTerms[] => {
+const dedupeByNetwork = (options: PaymentOption[]): PaymentOption[] => {
   const seen = new Set<string>();
-  return paymentTerms.filter((item) => {
+  return options.filter((item) => {
     if (seen.has(item.network)) {
       return false;
     }
@@ -82,31 +70,18 @@ const dedupePaymentTermsByNetwork = (
   });
 };
 
-const buildDefaultPaymentTerms = (
-  network: `${string}:${string}`,
-  defaults: {
-    payTo: string;
-    price: string;
-    facilitator: string;
-  }
-): X402PaymentTerms => ({
-  scheme: "exact",
-  network,
-  asset: "USDC",
-  price: defaults.price,
-  payTo: defaults.payTo,
-  facilitator: defaults.facilitator,
-});
-
-const parsePaymentTermsFromJson = (defaults: {
-  payTo: string;
-  price: string;
-  facilitator: string;
-}): X402PaymentTerms[] | undefined => {
+const parsePaymentOptions = (): PaymentOption[] => {
   const raw = asNonEmptyString(process.env.X402_PAYMENT_OPTIONS);
   if (!raw) {
-    return undefined;
+    throw new Error(
+      "X402_PAYMENT_OPTIONS is required. Set it to a JSON array, e.g. " +
+        '[{"network":"eip155:8453","payTo":"0x..."}]'
+    );
   }
+
+  const defaultFacilitator =
+    asNonEmptyString(process.env.X402_FACILITATOR_URL) ??
+    DEFAULT_X402_FACILITATOR;
 
   let parsed: unknown;
   try {
@@ -119,10 +94,10 @@ const parsePaymentTermsFromJson = (defaults: {
     throw new Error("X402_PAYMENT_OPTIONS must be a non-empty JSON array");
   }
 
-  const paymentTerms = parsed.map((item, index) => {
+  const paymentOptions = parsed.map((item, index) => {
     if (typeof item !== "object" || item === null || Array.isArray(item)) {
       throw new Error(
-        `X402_PAYMENT_OPTIONS[${index}] must be an object with at least a network field`
+        `X402_PAYMENT_OPTIONS[${index}] must be an object with network and payTo fields`
       );
     }
 
@@ -132,76 +107,58 @@ const parsePaymentTermsFromJson = (defaults: {
       throw new Error(`X402_PAYMENT_OPTIONS[${index}].network is required`);
     }
 
+    const normalized = networkRaw.trim();
+    if (!normalized.startsWith("eip155:")) {
+      throw new Error(
+        `X402_PAYMENT_OPTIONS[${index}].network must be an EVM CAIP-2 identifier (e.g. eip155:8453), received: ${networkRaw}`
+      );
+    }
+
+    const payTo = asNonEmptyString(option.payTo);
+    if (!payTo) {
+      throw new Error(`X402_PAYMENT_OPTIONS[${index}].payTo is required`);
+    }
+
     return {
-      scheme: "exact" as const,
-      network: parseEvmCaip2Network(
-        networkRaw,
-        `X402_PAYMENT_OPTIONS[${index}]`
-      ),
-      asset: "USDC" as const,
-      price: asNonEmptyString(option.price) ?? defaults.price,
-      payTo: asNonEmptyString(option.payTo) ?? defaults.payTo,
-      facilitator: asNonEmptyString(option.facilitator) ?? defaults.facilitator,
+      network: normalized as `${string}:${string}`,
+      payTo,
+      facilitator: asNonEmptyString(option.facilitator) ?? defaultFacilitator,
     };
   });
 
-  return dedupePaymentTermsByNetwork(paymentTerms);
+  return dedupeByNetwork(paymentOptions);
 };
 
-const parseNetworksFromEnv = (): `${string}:${string}`[] => {
-  const rawNetworks = asNonEmptyString(process.env.X402_NETWORKS);
-  if (!rawNetworks) {
-    return [];
-  }
+const toPaymentTerms = (
+  options: PaymentOption[],
+  price: string
+): X402PaymentTerms[] =>
+  options.map((option) => ({
+    scheme: "exact",
+    network: option.network,
+    asset: "USDC",
+    price,
+    payTo: option.payTo,
+    facilitator: option.facilitator,
+  }));
 
-  const parsedNetworks = rawNetworks
-    .split(",")
-    .map((network) => asNonEmptyString(network))
-    .filter((network): network is string => Boolean(network))
-    .map((network) => parseEvmCaip2Network(network, "X402_NETWORKS"));
-
-  return Array.from(new Set(parsedNetworks));
-};
-
-const resolvePaymentTerms = (): {
+const resolvePaymentTerms = (
+  price: string
+): {
   primary: X402PaymentTerms;
   options?: X402PaymentTerms[];
 } => {
-  const defaults = {
-    payTo: asNonEmptyString(process.env.X402_PAY_TO) ?? DEFAULT_X402_PAY_TO,
-    price: asNonEmptyString(process.env.X402_PRICE) ?? DEFAULT_X402_PRICE,
-    facilitator:
-      asNonEmptyString(process.env.X402_FACILITATOR_URL) ??
-      DEFAULT_X402_FACILITATOR,
-  };
-
-  const fromJson = parsePaymentTermsFromJson(defaults);
-  if (fromJson && fromJson.length > 0) {
-    return {
-      primary: fromJson[0],
-      options: fromJson.length > 1 ? fromJson : undefined,
-    };
-  }
-
-  const configuredNetworks = parseNetworksFromEnv();
-  const fallbackNetwork = parseEvmCaip2Network(
-    asNonEmptyString(process.env.X402_NETWORK) ?? DEFAULT_X402_NETWORK,
-    "X402_NETWORK"
-  );
-  const networks =
-    configuredNetworks.length > 0 ? configuredNetworks : [fallbackNetwork];
-  const options = networks.map((network) =>
-    buildDefaultPaymentTerms(network, defaults)
-  );
-
+  const terms = toPaymentTerms(parsePaymentOptions(), price);
   return {
-    primary: options[0],
-    options: options.length > 1 ? options : undefined,
+    primary: terms[0],
+    options: terms.length > 1 ? terms : undefined,
   };
 };
 
 const createAgentServices = (): AgentService[] => {
-  const paymentTerms = resolvePaymentTerms();
+  const servicePrice =
+    asNonEmptyString(process.env.X402_PRICE) ?? DEFAULT_X402_PRICE;
+  const paymentTerms = resolvePaymentTerms(servicePrice);
 
   return [
     {

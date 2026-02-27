@@ -62,7 +62,28 @@ curl -i -X POST http://localhost:3000/agent/services/perplexity-search/invoke \
 - One provider API key:
   - `PERPLEXITY_API_KEY` - API key for direct Perplexity API calls
   - `OPENROUTER_API_KEY` - API key when using OpenRouter as Perplexity proxy
-- `X402_PAY_TO` - wallet address that receives payment (unless set per option in `X402_PAYMENT_OPTIONS`)
+- `X402_PAYMENT_OPTIONS` - JSON array of payment options (each must include `network` and `payTo`)
+
+Example `X402_PAYMENT_OPTIONS`:
+
+```json
+[{ "network": "eip155:8453", "payTo": "0x..." }]
+```
+
+Multi-chain example (different payTo per chain):
+
+```json
+[
+  { "network": "eip155:8453", "payTo": "0xABC..." },
+  { "network": "eip155:1", "payTo": "0xDEF..." }
+]
+```
+
+Each option supports: `network` (required), `payTo` (required), `facilitator` (optional).
+Price is set globally via `X402_PRICE` and applies uniformly across all networks.
+When multiple options are configured, `payment-required` includes multiple `accepts`
+entries so clients can pay on a chain where they have funds.
+All networks must be EVM CAIP-2 identifiers supported by your configured facilitator.
 
 ## Optional environment
 
@@ -73,25 +94,8 @@ curl -i -X POST http://localhost:3000/agent/services/perplexity-search/invoke \
 - `OPENROUTER_HTTP_REFERER` - optional OpenRouter attribution header
 - `OPENROUTER_APP_NAME` - optional OpenRouter app name header (`X-Title`)
 - `X402_ENABLED` - set `false` to bypass paywall (useful for local tests)
-- `X402_NETWORK` - payment network identifier (default: `eip155:84532`)
-- `X402_NETWORKS` - comma-separated multi-chain payment options (e.g. `eip155:84532,eip155:8453`)
-- `X402_PRICE` - paid route price string (default: `$0.02`)
-- `X402_FACILITATOR_URL` - facilitator URL (default: `https://x402.org/facilitator`)
-- `X402_PAYMENT_OPTIONS` - advanced JSON overrides for multi-chain payment options
-
-Example `X402_PAYMENT_OPTIONS`:
-
-```json
-[
-  { "network": "eip155:84532", "price": "$0.03", "payTo": "0x..." },
-  { "network": "eip155:8453", "price": "$0.03", "payTo": "0x..." }
-]
-```
-
-When multiple x402 payment options are configured, `payment-required` includes
-multiple `accepts` entries so clients can pay on a chain where they have funds.
-All configured networks must be EVM CAIP-2 identifiers and supported by your
-configured facilitator.
+- `X402_PRICE` - service price, applies to all payment networks (default: `$0.02`)
+- `X402_FACILITATOR_URL` - fallback facilitator URL (default: `https://x402.org/facilitator`)
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.
