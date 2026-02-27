@@ -3,3 +3,6 @@ dist/
 *.js.map
 .env
 coverage/
+frontend/dist/
+frontend/node_modules/
+paid-e2e.mjs

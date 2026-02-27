@@ -1,3 +1,4 @@
+import path from "path";
 import express, { Request, Response } from "express";
 import {
   AgentServiceInputError,
@@ -50,6 +51,8 @@ export const createApp = (options: CreateAppOptions = {}) => {
 
     return `${req.protocol}://${host}`;
   };
+
+  const frontendDist = path.join(__dirname, "../frontend/dist");
 
   app.get("/", (_req: Request, res: Response) => {
     res.json({ message: "Hello from web4-service!" });
@@ -147,6 +150,17 @@ export const createApp = (options: CreateAppOptions = {}) => {
       }
     }
   );
+
+  app.use(express.static(frontendDist));
+
+  app.get("{*path}", (_req: Request, res: Response) => {
+    const indexPath = path.join(frontendDist, "index.html");
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        res.status(404).json({ error: "not_found" });
+      }
+    });
+  });
 
   return app;
 };
