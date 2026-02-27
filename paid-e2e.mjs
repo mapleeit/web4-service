@@ -275,31 +275,89 @@ const main = async () => {
     unpaidBody
   );
 
-  const selectedPayment = paymentRequired.accepts?.[0];
-  if (!selectedPayment) {
+  const paymentOptions = Array.isArray(paymentRequired.accepts)
+    ? paymentRequired.accepts
+    : [];
+  const selectedPayment = paymentOptions[0];
+  if (!selectedPayment || paymentOptions.length === 0) {
     throw new Error("No payment options found in payment-required response.");
   }
 
-  const rpcUrl = resolveRpcUrl(selectedPayment.network);
-  const chain = resolveChain(selectedPayment.network, rpcUrl);
-  console.log(
-    `[2/4] Payment required: network=${selectedPayment.network}, amount=${selectedPayment.amount}, payTo=${selectedPayment.payTo}`
-  );
-  console.log(`      using_rpc=${rpcUrl}`);
-
   const account = privateKeyToAccount(normalizePrivateKey(privateKey));
+  const evaluatedPaymentOptions = await Promise.all(
+    paymentOptions.map(async (paymentOption) => {
+      const rpcUrl = resolveRpcUrl(paymentOption.network);
+      const chain = resolveChain(paymentOption.network, rpcUrl);
+      const publicClient = createPublicClient({
+        chain,
+        transport: http(rpcUrl),
+      });
+      const requiredRawAmount = BigInt(String(paymentOption.amount));
+      const balances = await getTokenAndNativeBalanceSnapshot(
+        publicClient,
+        paymentOption.asset,
+        account.address
+      );
+      const hasSufficientBalance = balances.tokenBalanceRaw >= requiredRawAmount;
+
+      return {
+        paymentOption,
+        rpcUrl,
+        chain,
+        publicClient,
+        requiredRawAmount,
+        balances,
+        hasSufficientBalance,
+      };
+    })
+  );
+
+  for (const option of evaluatedPaymentOptions) {
+    const requiredFormatted = formatUnits(
+      option.requiredRawAmount,
+      option.balances.tokenDecimals
+    );
+    console.log(
+      `      candidate_network=${option.paymentOption.network}, required_${option.balances.tokenSymbol}=${requiredFormatted}, wallet_${option.balances.tokenSymbol}=${option.balances.tokenBalanceFormatted}, sufficient=${option.hasSufficientBalance}`
+    );
+  }
+
+  const selectedPaymentOption =
+    evaluatedPaymentOptions.find((option) => option.hasSufficientBalance) ??
+    evaluatedPaymentOptions[0];
+  const paymentRequiredForSigning = {
+    ...paymentRequired,
+    accepts: [selectedPaymentOption.paymentOption],
+  };
+  const publicClientsByNetwork = new Map(
+    evaluatedPaymentOptions.map((option) => [
+      option.paymentOption.network,
+      option.publicClient,
+    ])
+  );
+
+  console.log(
+    `[2/4] Payment required: network=${selectedPaymentOption.paymentOption.network}, amount=${selectedPaymentOption.paymentOption.amount}, payTo=${selectedPaymentOption.paymentOption.payTo}`
+  );
+  console.log(`      using_rpc=${selectedPaymentOption.rpcUrl}`);
   console.log(`      payer=${account.address}`);
-  const publicClient = createPublicClient({
-    chain,
-    transport: http(rpcUrl),
-  });
+
+  if (!selectedPaymentOption.hasSufficientBalance) {
+    console.warn(
+      "WARN no payment option has sufficient token balance; falling back to first payment option."
+    );
+  }
+
+  const publicClient = selectedPaymentOption.publicClient;
   const signer = toClientEvmSigner(account, publicClient);
   const httpClient = new x402HTTPClient(
     new x402Client().register("eip155:*", new ExactEvmScheme(signer))
   );
 
   console.log("[3/4] Creating payment payload...");
-  const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
+  const paymentPayload = await httpClient.createPaymentPayload(
+    paymentRequiredForSigning
+  );
   const paymentHeaders = httpClient.encodePaymentSignatureHeader(paymentPayload);
   console.log(`      header_keys=${Object.keys(paymentHeaders).join(",")}`);
   if (
@@ -353,10 +411,12 @@ const main = async () => {
 
     if (decodedPaymentRequired?.error === "insufficient_funds") {
       const retryAcceptedPayment =
-        decodedPaymentRequired?.accepts?.[0] ?? selectedPayment;
+        decodedPaymentRequired?.accepts?.[0] ?? selectedPaymentOption.paymentOption;
       if (retryAcceptedPayment?.asset && retryAcceptedPayment?.amount) {
+        const diagnosticsClient =
+          publicClientsByNetwork.get(retryAcceptedPayment.network) ?? publicClient;
         const balances = await getTokenAndNativeBalanceSnapshot(
-          publicClient,
+          diagnosticsClient,
           retryAcceptedPayment.asset,
           account.address
         );
