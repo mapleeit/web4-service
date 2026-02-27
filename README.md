@@ -1,6 +1,8 @@
-# web4-service
+# x402 Agent Services
 
-A web service built with Node.js, Express, and TypeScript.
+Pay-per-call AI agent services with multi-chain EVM payment support. No API keys needed — just standard HTTP with built-in micropayments.
+
+Built with Node.js, Express, and TypeScript.
 
 ## Getting Started
 
