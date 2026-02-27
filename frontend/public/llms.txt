@@ -6,9 +6,25 @@ This service provides AI agent tools accessible via HTTP, with payments handled 
 
 ## API Endpoints
 
-- [Service Catalog](https://web4svc.com/agent/services): List all available agent services with pricing and schemas
-- [Agent Discovery](https://web4svc.com/.well-known/agent-services): Standard agent service manifest (well-known URI)
-- [Health Check](https://web4svc.com/health): Service health status
+- [Service Catalog](https://web4svc.com/agent/services): `GET /agent/services` — List all available agent services with pricing and schemas
+- [Agent Discovery](https://web4svc.com/.well-known/agent-services): `GET /.well-known/agent-services` — Standard agent service manifest with absolute endpoint URLs
+- [Invoke Service](https://web4svc.com/agent/services/echo/invoke): `POST /agent/services/:serviceId/invoke` — Invoke an agent service by ID (paid services require x402 payment headers)
+- [Health Check](https://web4svc.com/health): `GET /health` — Service health status and uptime
+
+## Invoke Response Format
+
+All service invocations return a wrapper object:
+
+```json
+{
+  "serviceId": "echo",
+  "output": {
+    // service-specific output fields
+  }
+}
+```
+
+Error responses use the format `{ "error": "error_code", "serviceId": "..." }` with appropriate HTTP status codes (400, 402, 404, 502, 503).
 
 ## Available Services
 
@@ -17,28 +33,31 @@ This service provides AI agent tools accessible via HTTP, with payments handled 
 AI-powered web search via Perplexity. Returns answers with source citations.
 
 - Endpoint: `POST /agent/services/perplexity-search/invoke`
-- Price: $0.02 per request (USDC, via x402)
-- Input: `{ "query": "your search query", "model": "optional model name" }`
-- Output: `{ "answer": "...", "citations": ["..."], "model": "..." }`
+- Price: $0.03 per request (USDC, via x402)
+- Input: `{ "query": "your search query", "model": "optional model override" }`
+- Output (inside `output` field): `{ "answer": "...", "citations": ["url1", "url2"], "model": "sonar-pro" }`
+- `query` is required; `model` is optional
 
 ### Echo (Free)
 
-Free utility endpoint for connectivity and payload checks.
+Free utility endpoint for connectivity and payload checks. No payment required.
 
 - Endpoint: `POST /agent/services/echo/invoke`
-- Input: `{ "message": "optional text" }`
-- Output: `{ "message": "...", "echoedAt": "ISO 8601 timestamp" }`
+- Input: `{ "message": "optional text" }` — defaults to `"hello agent"` if omitted
+- Output (inside `output` field): `{ "message": "hello agent", "echoedAt": "2025-01-01T00:00:00.000Z" }`
 
 ## x402 Payment Flow
 
 1. Call a paid endpoint without payment headers.
 2. Server responds with HTTP 402 and payment requirements in the `payment-required` header.
-3. Client wallet creates a payment (USDC on any supported EVM network).
+3. Client wallet creates a USDC payment on a supported EVM network.
 4. Client retries with the x402 payment header and receives the service result.
+
+Free services (like echo) skip the payment flow entirely.
 
 ## Supported Payment Networks
 
-Payments are accepted in USDC on EVM networks via the PayAI facilitator. Supported networks include Base, Avalanche, Polygon, Sei, and their testnets.
+Payments are accepted in USDC via the PayAI facilitator. The specific networks available depend on the deployment configuration (set via `X402_PAYMENT_OPTIONS`). Query `GET /agent/services` to see the current `paymentOptions` for each paid service, which lists accepted networks.
 
 ## Links
 
