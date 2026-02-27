@@ -1,6 +1,6 @@
 import { x402Client, x402HTTPClient } from "@x402/core/client";
 import { ExactEvmScheme, toClientEvmSigner } from "@x402/evm";
-import { createPublicClient, http } from "viem";
+import { createPublicClient, formatEther, formatUnits, http } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { base, baseSepolia, mainnet } from "viem/chains";
 
@@ -8,6 +8,29 @@ const DEFAULT_BASE_URL = "https://web4-service-production.up.railway.app";
 const DEFAULT_ENDPOINT = "/agent/services/perplexity-search/invoke";
 const DEFAULT_QUERY = "latest x402 updates";
 const SIGNATURE_SKEW_WARNING_SECONDS = 300;
+const ERC20_READ_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    name: "symbol",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+  },
+];
 
 const asNonEmptyString = (value) => {
   if (typeof value !== "string") {
@@ -51,6 +74,47 @@ const toSafeJson = (value) => {
   } catch {
     return String(value);
   }
+};
+
+const getTokenAndNativeBalanceSnapshot = async (
+  publicClient,
+  tokenAddress,
+  ownerAddress
+) => {
+  const [nativeBalance, tokenBalanceRaw, tokenDecimals, tokenSymbol] =
+    await Promise.all([
+      publicClient.getBalance({ address: ownerAddress }),
+      publicClient.readContract({
+        address: tokenAddress,
+        abi: ERC20_READ_ABI,
+        functionName: "balanceOf",
+        args: [ownerAddress],
+      }),
+      publicClient
+        .readContract({
+          address: tokenAddress,
+          abi: ERC20_READ_ABI,
+          functionName: "decimals",
+        })
+        .catch(() => 6),
+      publicClient
+        .readContract({
+          address: tokenAddress,
+          abi: ERC20_READ_ABI,
+          functionName: "symbol",
+        })
+        .catch(() => "TOKEN"),
+    ]);
+
+  const decimalsNumber = Number(tokenDecimals);
+  return {
+    nativeBalanceRaw: nativeBalance,
+    nativeBalanceFormatted: formatEther(nativeBalance),
+    tokenBalanceRaw,
+    tokenBalanceFormatted: formatUnits(tokenBalanceRaw, decimalsNumber),
+    tokenDecimals: decimalsNumber,
+    tokenSymbol: String(tokenSymbol),
+  };
 };
 
 const resolveTargetUrl = () => {
@@ -283,6 +347,42 @@ const main = async () => {
           `      paid_retry_payment_response_decoded=${toSafeJson(
             decodedPaymentResponse
           )}`
+        );
+      }
+    }
+
+    if (decodedPaymentRequired?.error === "insufficient_funds") {
+      const retryAcceptedPayment =
+        decodedPaymentRequired?.accepts?.[0] ?? selectedPayment;
+      if (retryAcceptedPayment?.asset && retryAcceptedPayment?.amount) {
+        const balances = await getTokenAndNativeBalanceSnapshot(
+          publicClient,
+          retryAcceptedPayment.asset,
+          account.address
+        );
+        const requiredRawAmount = BigInt(String(retryAcceptedPayment.amount));
+        const requiredFormattedAmount = formatUnits(
+          requiredRawAmount,
+          balances.tokenDecimals
+        );
+        console.log("      insufficient_funds_diagnosis=true");
+        console.log(
+          `      required_${balances.tokenSymbol}_raw=${requiredRawAmount.toString()}`
+        );
+        console.log(
+          `      required_${balances.tokenSymbol}=${requiredFormattedAmount}`
+        );
+        console.log(
+          `      wallet_${balances.tokenSymbol}_raw=${balances.tokenBalanceRaw.toString()}`
+        );
+        console.log(
+          `      wallet_${balances.tokenSymbol}=${balances.tokenBalanceFormatted}`
+        );
+        console.log(
+          `      wallet_native_raw=${balances.nativeBalanceRaw.toString()}`
+        );
+        console.log(
+          `      wallet_native=${balances.nativeBalanceFormatted}`
         );
       }
     }
