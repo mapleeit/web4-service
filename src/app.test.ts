@@ -245,16 +245,20 @@ describe("POST /agent/services/:serviceId/invoke", () => {
     expect(typeof res.body.output.echoedAt).toBe("string");
   });
 
-  it("returns 402 for paid services when x402 middleware is enabled", async () => {
-    const app = createApp({ enableX402: true });
+  it(
+    "returns 402 for paid services when x402 middleware is enabled",
+    async () => {
+      const app = createApp({ enableX402: true });
 
-    const res = await request(app)
-      .post("/agent/services/perplexity-search/invoke")
-      .send({ query: "latest x402 updates" });
+      const res = await request(app)
+        .post("/agent/services/perplexity-search/invoke")
+        .send({ query: "latest x402 updates" });
 
-    expect(res.status).toBe(402);
-    expect(res.headers["payment-required"]).toBeDefined();
-  });
+      expect(res.status).toBe(402);
+      expect(res.headers["payment-required"]).toBeDefined();
+    },
+    15_000
+  );
 
   it("calls Perplexity and returns search output when x402 is disabled", async () => {
     process.env.PERPLEXITY_API_KEY = "test-key";

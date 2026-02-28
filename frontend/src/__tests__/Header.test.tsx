@@ -3,9 +3,9 @@ import { render, screen } from "@testing-library/react";
 import Header from "../components/Header";
 
 describe("Header", () => {
-  it("renders the brand name", () => {
+  it("renders the brand logo", () => {
     render(<Header />);
-    expect(screen.getByText("web4-service")).toBeInTheDocument();
+    expect(screen.getByAltText("web4-service")).toBeInTheDocument();
   });
 
   it("renders navigation links", () => {
