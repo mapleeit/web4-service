@@ -47,10 +47,16 @@ export async function fetchServices(): Promise<ServicesResponse> {
   return res.json() as Promise<ServicesResponse>;
 }
 
-export async function invokeService(
+export interface InvokeRawResult {
+  response: Response;
+  status: number;
+  body: unknown;
+}
+
+export async function invokeServiceRaw(
   serviceId: string,
   input: Record<string, unknown>,
-): Promise<InvokeResult> {
+): Promise<InvokeRawResult> {
   const res = await fetch(`/agent/services/${serviceId}/invoke`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -58,5 +64,13 @@ export async function invokeService(
   });
 
   const body = await res.json().catch(() => null);
-  return { status: res.status, body };
+  return { response: res, status: res.status, body };
+}
+
+export async function invokeService(
+  serviceId: string,
+  input: Record<string, unknown>,
+): Promise<InvokeResult> {
+  const { status, body } = await invokeServiceRaw(serviceId, input);
+  return { status, body };
 }

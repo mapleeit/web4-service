@@ -1,0 +1,235 @@
+---
+description: x402 payment protocol wire format, EIP-712 signing, and browser implementation reference
+globs:
+  - src/x402Middleware.ts
+  - frontend/src/lib/x402.ts
+  - mcp-server/src/client.ts
+---
+
+# x402 Protocol Reference
+
+## Overview
+
+x402 is a pay-per-call micropayment protocol built on HTTP 402. Clients discover payment requirements from a 402 response, sign an EIP-712 authorization off-chain (no gas), and retry with a payment header. A facilitator verifies and settles on-chain.
+
+## 402 Response Format
+
+The server returns **two representations** in a single 402 response:
+
+### Response body (human-readable, for display)
+
+```json
+{
+  "error": "payment_required",
+  "note": "This endpoint uses x402. Pay and retry the same request.",
+  "network": "eip155:8453",
+  "price": "$0.0005",
+  "payTo": "0x..."
+}
+```
+
+### `PAYMENT-REQUIRED` header (machine-readable, for payment construction)
+
+URL-safe base64-encoded JSON:
+
+```json
+{
+  "x402Version": 2,
+  "error": "Payment required",
+  "resource": {
+    "url": "https://web4svc.com/agent/services/token-price/invoke",
+    "description": "Real-time token price lookup via CoinGecko.",
+    "mimeType": ""
+  },
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "amount": "500",
+      "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      "payTo": "0x...",
+      "maxTimeoutSeconds": 300,
+      "extra": { "name": "USD Coin", "version": "2" }
+    }
+  ]
+}
+```
+
+Key fields in each `accepts` entry:
+
+| Field | Description |
+|---|---|
+| `scheme` | Payment scheme — `"exact"` for USDC EIP-3009 transfers |
+| `network` | CAIP-2 chain ID, e.g. `"eip155:8453"` (Base), `"eip155:1"` (Ethereum) |
+| `amount` | Raw integer in token's smallest unit. USDC has 6 decimals, so `"500"` = $0.0005 |
+| `asset` | ERC-20 token contract address (USDC on Base: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`) |
+| `payTo` | Recipient address |
+| `maxTimeoutSeconds` | How long the payment authorization is valid |
+| `extra.name` | Token name for EIP-712 domain (e.g. `"USD Coin"`) |
+| `extra.version` | Token version for EIP-712 domain (e.g. `"2"`) |
+
+### Amount conversion
+
+```
+human-readable = raw_amount / 10^decimals
+# USDC (6 decimals): 500 / 1_000_000 = 0.0005
+# Display: "$0.0005 USDC"
+```
+
+## Payment Signing (EIP-3009 — "Exact" scheme)
+
+The default scheme is EIP-3009 `TransferWithAuthorization`. The client signs an off-chain typed data message authorizing a USDC transfer — no on-chain transaction or gas required from the client.
+
+### Step 1: Build authorization
+
+```typescript
+const nonce = toHex(crypto.getRandomValues(new Uint8Array(32))); // 32 random bytes
+const now = Math.floor(Date.now() / 1000);
+
+const authorization = {
+  from: walletAddress,           // payer
+  to: getAddress(selected.payTo), // recipient
+  value: selected.amount,         // raw amount string, e.g. "500"
+  validAfter: (now - 600).toString(),
+  validBefore: (now + selected.maxTimeoutSeconds).toString(),
+  nonce,
+};
+```
+
+### Step 2: Sign EIP-712 typed data
+
+**Domain** (from `accepts[].extra` and `accepts[].asset`):
+
+```typescript
+const domain = {
+  name: extra.name,           // "USD Coin"
+  version: extra.version,     // "2"
+  chainId: BigInt(chainId),   // 8453 for Base
+  verifyingContract: getAddress(asset), // USDC contract
+};
+```
+
+**Types**:
+
+```typescript
+const types = {
+  TransferWithAuthorization: [
+    { name: "from", type: "address" },
+    { name: "to", type: "address" },
+    { name: "value", type: "uint256" },
+    { name: "validAfter", type: "uint256" },
+    { name: "validBefore", type: "uint256" },
+    { name: "nonce", type: "bytes32" },
+  ],
+};
+```
+
+**Message** (same fields as authorization, but with BigInt values):
+
+```typescript
+const message = {
+  from: getAddress(authorization.from),
+  to: getAddress(authorization.to),
+  value: BigInt(authorization.value),
+  validAfter: BigInt(authorization.validAfter),
+  validBefore: BigInt(authorization.validBefore),
+  nonce: authorization.nonce, // bytes32 hex string
+};
+```
+
+**Sign** via viem's `signTypedData`:
+
+```typescript
+const signature = await walletClient.signTypedData({
+  account: walletAddress,
+  domain,
+  types,
+  primaryType: "TransferWithAuthorization",
+  message,
+});
+```
+
+### Step 3: Construct payment payload
+
+```typescript
+const paymentPayload = {
+  x402Version: 2,
+  payload: { authorization, signature },
+  resource: requirements.resource,     // from PAYMENT-REQUIRED header
+  accepted: selected,                  // the chosen accepts entry
+};
+```
+
+### Step 4: Encode and send
+
+The payload is URL-safe base64-encoded and sent in the `PAYMENT-SIGNATURE` header:
+
+```typescript
+// URL-safe base64: replace + with -, / with _, strip trailing =
+const encoded = btoa(JSON.stringify(paymentPayload))
+  .replace(/\+/g, "-")
+  .replace(/\//g, "_")
+  .replace(/=+$/, "");
+
+fetch(url, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "PAYMENT-SIGNATURE": encoded,
+  },
+  body: JSON.stringify(input),
+});
+```
+
+## Header Summary
+
+| Header | Direction | Encoding | Version |
+|---|---|---|---|
+| `PAYMENT-REQUIRED` | Server → Client (402 response) | URL-safe base64 JSON | v2 |
+| `PAYMENT-SIGNATURE` | Client → Server (retry) | URL-safe base64 JSON | v2 |
+| `PAYMENT-RESPONSE` | Server → Client (after settlement) | URL-safe base64 JSON | v2 |
+| `X-PAYMENT` | Client → Server (retry) | URL-safe base64 JSON | v1 (legacy) |
+
+## Server-side (src/x402Middleware.ts)
+
+The middleware uses `@x402/express`'s `paymentMiddleware()`:
+
+1. Each paid route is registered with `accepts` config (scheme, network, price, payTo)
+2. Unpaid requests get a 402 with the `PAYMENT-REQUIRED` header + custom JSON body
+3. Payment verification is delegated to a facilitator (`X402_FACILITATOR_URL`)
+4. After the handler succeeds, settlement happens via the facilitator
+5. Settlement response is returned in the `PAYMENT-RESPONSE` header
+
+## MCP Server (mcp-server/src/client.ts) — Node.js
+
+Uses `@x402/core/client` + `@x402/evm` directly since Node.js has full access to `crypto`, `stream`, etc.:
+
+```typescript
+const signer = toClientEvmSigner(account, publicClient);
+const client = new x402Client().register(network, new ExactEvmScheme(signer));
+const httpClient = new x402HTTPClient(client);
+
+// Parse 402 response
+const paymentRequired = httpClient.getPaymentRequiredResponse(getHeader, body);
+// Create payment
+const paymentPayload = await httpClient.createPaymentPayload(paymentRequired);
+// Encode header
+const headers = httpClient.encodePaymentSignatureHeader(paymentPayload);
+```
+
+## Browser (frontend/src/lib/x402.ts) — Pure viem
+
+`@x402/core/client` and `@x402/evm` **cannot be used in the browser** because they transitively depend on Node.js built-ins (`crypto.randomBytes` via `@x402/extensions`, `stream.Transform`, `util.debuglog`). Adding polyfills (`vite-plugin-node-polyfills`) inflates the bundle from ~335KB to ~1970KB.
+
+Instead, the browser implementation:
+
+1. Parses the `PAYMENT-REQUIRED` header manually (base64 decode → JSON parse)
+2. Signs EIP-712 typed data directly via `viem`'s `walletClient.signTypedData()`
+3. Encodes the payment payload with `btoa()` (browser-native)
+4. Uses `crypto.getRandomValues()` for nonce generation (Web Crypto API)
+
+This keeps the bundle lean (~335KB gzipped ~103KB) while implementing the full x402 payment flow.
+
+## Alternate Scheme: Permit2
+
+The x402 protocol also supports Permit2-based payments (`extra.assetTransferMethod === "permit2"`). This is used when the token doesn't support EIP-3009. The flow is similar but uses the `PermitWitnessTransferFrom` EIP-712 type and requires a Permit2 allowance. Our server currently uses EIP-3009 exclusively for USDC.
