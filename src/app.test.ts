@@ -64,11 +64,11 @@ describe("GET /agent/services", () => {
         expect.objectContaining({ id: "echo" }),
         expect.objectContaining({
           id: "perplexity-search",
-          payment: expect.objectContaining({ price: "$0.02" }),
+          payment: expect.objectContaining({ price: "$0.03" }),
         }),
         expect.objectContaining({
           id: "token-price",
-          payment: expect.objectContaining({ price: "$0.001" }),
+          payment: expect.objectContaining({ price: "$0.0005" }),
         }),
       ])
     );
@@ -128,7 +128,7 @@ describe("GET /agent/services", () => {
     );
   });
 
-  it("applies global X402_PRICE to services without a per-service override", async () => {
+  it("code-level default takes priority over global X402_PRICE", async () => {
     process.env.X402_PAYMENT_OPTIONS = JSON.stringify([
       {
         network: "eip155:8453",
@@ -139,33 +139,27 @@ describe("GET /agent/services", () => {
         payTo: "0x2222222222222222222222222222222222222222",
       },
     ]);
-    process.env.X402_PRICE = "$0.05";
+    process.env.X402_PRICE = "$0.99";
 
     const app = createApp({ enableX402: false });
     const res = await request(app).get("/agent/services");
     expect(res.status).toBe(200);
 
-    const paidService = res.body.services.find(
-      (service: { id: string }) => service.id === "perplexity-search"
+    const search = res.body.services.find(
+      (s: { id: string }) => s.id === "perplexity-search"
+    );
+    const tokenPrice = res.body.services.find(
+      (s: { id: string }) => s.id === "token-price"
     );
 
-    expect(paidService).toBeDefined();
-    expect(paidService.payment).toEqual(
-      expect.objectContaining({
-        network: "eip155:8453",
-        payTo: "0x1111111111111111111111111111111111111111",
-        price: "$0.05",
-      })
-    );
-    expect(paidService.paymentOptions).toEqual([
-      expect.objectContaining({
-        network: "eip155:8453",
-        price: "$0.05",
-      }),
-      expect.objectContaining({
-        network: "eip155:1",
-        price: "$0.05",
-      }),
+    // Both services have code-level defaults, so global $0.99 is ignored
+    expect(search.payment.price).toBe("$0.03");
+    expect(tokenPrice.payment.price).toBe("$0.0005");
+
+    // Multi-network options also use per-service prices
+    expect(search.paymentOptions).toEqual([
+      expect.objectContaining({ network: "eip155:8453", price: "$0.03" }),
+      expect.objectContaining({ network: "eip155:1", price: "$0.03" }),
     ]);
   });
 
@@ -188,8 +182,9 @@ describe("GET /agent/services", () => {
     expect(tokenPrice.payment.price).toBe("$0.003");
   });
 
-  it("per-service env var takes priority over global X402_PRICE", async () => {
-    process.env.X402_PRICE = "$0.05";
+  it("per-service env var overrides code-level default and global", async () => {
+    process.env.X402_PRICE = "$0.99";
+    process.env.X402_PRICE_PERPLEXITY_SEARCH = "$0.07";
     process.env.X402_PRICE_TOKEN_PRICE = "$0.002";
 
     const app = createApp({ enableX402: false });
@@ -202,9 +197,8 @@ describe("GET /agent/services", () => {
       (s: { id: string }) => s.id === "token-price"
     );
 
-    // perplexity-search has no service-specific env, falls through to global
-    expect(search.payment.price).toBe("$0.05");
-    // token-price has a service-specific env, overrides both global and code default
+    // Both overridden by service-specific env vars
+    expect(search.payment.price).toBe("$0.07");
     expect(tokenPrice.payment.price).toBe("$0.002");
   });
 
@@ -219,10 +213,10 @@ describe("GET /agent/services", () => {
       (s: { id: string }) => s.id === "token-price"
     );
 
-    // perplexity-search: no code default → global default $0.02
-    expect(search.payment.price).toBe("$0.02");
-    // token-price: code default $0.001
-    expect(tokenPrice.payment.price).toBe("$0.001");
+    // perplexity-search: code default $0.03
+    expect(search.payment.price).toBe("$0.03");
+    // token-price: code default $0.0005
+    expect(tokenPrice.payment.price).toBe("$0.0005");
   });
 });
 

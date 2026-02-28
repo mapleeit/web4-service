@@ -114,8 +114,8 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 
 | Service | Env var | Code default |
 |---|---|---|
-| `perplexity-search` | `X402_PRICE_PERPLEXITY_SEARCH` | — (uses global) |
-| `token-price` | `X402_PRICE_TOKEN_PRICE` | `$0.001` |
+| `perplexity-search` | `X402_PRICE_PERPLEXITY_SEARCH` | `$0.03` |
+| `token-price` | `X402_PRICE_TOKEN_PRICE` | `$0.0005` |
 
 ## Optional environment
 
@@ -128,7 +128,7 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 - `X402_ENABLED` - set `false` to bypass paywall (useful for local tests)
 - `X402_PRICE` - global default price for all services (default: `$0.02`)
 - `X402_PRICE_PERPLEXITY_SEARCH` - override price for perplexity-search
-- `X402_PRICE_TOKEN_PRICE` - override price for token-price (code default: `$0.001`)
+- `X402_PRICE_TOKEN_PRICE` - override price for token-price (code default: `$0.0005`)
 - `X402_FACILITATOR_URL` - facilitator URL (default: `https://facilitator.openx402.ai`)
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as

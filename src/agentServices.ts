@@ -167,8 +167,8 @@ const createAgentServices = (): AgentService[] => {
     };
   };
 
-  const searchTerms = buildPaymentTerms("perplexity-search");
-  const tokenPriceTerms = buildPaymentTerms("token-price", "$0.001");
+  const searchTerms = buildPaymentTerms("perplexity-search", "$0.03");
+  const tokenPriceTerms = buildPaymentTerms("token-price", "$0.0005");
 
   return [
     {

@@ -123,7 +123,7 @@ Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment
 - **Endpoint**: `POST /agent/services/perplexity-search/invoke`
 - **Input**: `{ query: string (required), model?: string }`
 - **Output**: `{ answer: string, citations: string[], model: string }`
-- **Price**: `X402_PRICE_PERPLEXITY_SEARCH` → global `X402_PRICE` → `$0.02` (no code-level default)
+- **Price**: `X402_PRICE_PERPLEXITY_SEARCH` → code default `$0.03` → global `X402_PRICE` → `$0.02`
 - **Implementation** (`src/perplexitySearch.ts`): Calls Perplexity chat completions API (or OpenRouter as proxy)
 - **Provider resolution**: `PERPLEXITY_API_PROVIDER` env var, or auto-detects based on which API key is set
 - **Default models**: `sonar-pro` (direct Perplexity), `perplexity/sonar-pro` (OpenRouter)
@@ -133,7 +133,7 @@ Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment
 - **Endpoint**: `POST /agent/services/token-price/invoke`
 - **Input**: `{ token: string (required), currency?: string (default "usd") }`
 - **Output**: `{ id, symbol, name, price, currency, change24h, marketCap, volume24h, lastUpdated }`
-- **Price**: `X402_PRICE_TOKEN_PRICE` → code default `$0.001` → global `X402_PRICE` → `$0.02`
+- **Price**: `X402_PRICE_TOKEN_PRICE` → code default `$0.0005` → global `X402_PRICE` → `$0.02`
 - **Implementation** (`src/tokenPrice.ts`): Two-step CoinGecko lookup — search by name/symbol/ID, then fetch price data
 - **API calls**: `GET /search?query={token}` (resolve to CoinGecko ID) → `GET /simple/price?ids={id}` (fetch price + market data)
 - **No API key required** — uses CoinGecko free tier (~10-30 req/min rate limit)
@@ -221,8 +221,8 @@ Vite dev server proxies API requests to backend on port 3000.
 | `PORT` | `3000` | Server listen port |
 | `X402_ENABLED` | `true` | Set `false` to bypass paywall |
 | `X402_PRICE` | `$0.02` | Global default price (USDC), used when no per-service price is set |
-| `X402_PRICE_PERPLEXITY_SEARCH` | — | Per-service price override for perplexity-search |
-| `X402_PRICE_TOKEN_PRICE` | — | Per-service price override for token-price (code default: `$0.001`) |
+| `X402_PRICE_PERPLEXITY_SEARCH` | — | Per-service price override for perplexity-search (code default: `$0.03`) |
+| `X402_PRICE_TOKEN_PRICE` | — | Per-service price override for token-price (code default: `$0.0005`) |
 | `X402_FACILITATOR_URL` | `https://facilitator.payai.network` | Facilitator endpoint |
 | `PERPLEXITY_API_PROVIDER` | auto-detect | `perplexity` or `openrouter` |
 | `PERPLEXITY_MODEL` | provider default | Model override |
