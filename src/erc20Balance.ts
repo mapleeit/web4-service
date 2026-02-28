@@ -1,7 +1,7 @@
-import { createPublicClient, http, type PublicClient, isAddress, formatUnits, erc20Abi } from "viem";
+import { createPublicClient, http, type PublicClient, type Chain, isAddress, formatUnits, erc20Abi } from "viem";
 import { mainnet, base } from "viem/chains";
 
-const SUPPORTED_CHAINS: Record<string, { chain: typeof mainnet; defaultRpc: string; envKey: string }> = {
+const SUPPORTED_CHAINS: Record<string, { chain: Chain; defaultRpc: string; envKey: string }> = {
   ethereum: { chain: mainnet, defaultRpc: "https://ethereum-rpc.publicnode.com", envKey: "ETHEREUM_RPC_URL" },
   base: { chain: base, defaultRpc: "https://base-rpc.publicnode.com", envKey: "BASE_RPC_URL" },
 };
