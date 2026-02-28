@@ -1,6 +1,7 @@
 import { runPerplexitySearch } from "./perplexitySearch";
 import { lookupTokenPrice } from "./tokenPrice";
 import { resolveEns } from "./ensResolve";
+import { queryBalance } from "./erc20Balance";
 
 interface PaymentOption {
   network: `${string}:${string}`;
@@ -171,6 +172,7 @@ const createAgentServices = (): AgentService[] => {
   const searchTerms = buildPaymentTerms("perplexity-search", "$0.03");
   const tokenPriceTerms = buildPaymentTerms("token-price", "$0.0005");
   const ensTerms = buildPaymentTerms("ens-resolve", "$0.0005");
+  const balanceTerms = buildPaymentTerms("erc20-balance", "$0.0005");
 
   return [
     {
@@ -330,6 +332,56 @@ const createAgentServices = (): AgentService[] => {
         }
 
         return resolveEns({ name, address });
+      },
+    },
+    {
+      id: "erc20-balance",
+      name: "ERC-20 Balance Lookup (Paid)",
+      description:
+        "Query native ETH or ERC-20 token balances for any wallet address on Ethereum or Base.",
+      endpoint: "/agent/services/erc20-balance/invoke",
+      inputSchema: {
+        type: "object",
+        required: ["address"],
+        properties: {
+          address: {
+            type: "string",
+            description: "EVM wallet address to query (e.g. '0xd8dA...')",
+          },
+          token: {
+            type: "string",
+            description: "ERC-20 contract address. Omit for native ETH balance.",
+          },
+          chain: {
+            type: "string",
+            description: "Chain to query: 'ethereum' (default) or 'base'",
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          address: { type: "string" },
+          chain: { type: "string" },
+          token: { type: "string" },
+          symbol: { type: "string" },
+          name: { type: "string" },
+          decimals: { type: "integer" },
+          balance: { type: "string" },
+          formatted: { type: "string" },
+        },
+      },
+      payment: balanceTerms.primary,
+      paymentOptions: balanceTerms.options,
+      handler: async (input) => {
+        const address = asNonEmptyString(input.address);
+        if (!address) {
+          throw new AgentServiceInputError("address must be a non-empty string");
+        }
+
+        const token = asNonEmptyString(input.token);
+        const chain = asNonEmptyString(input.chain);
+        return queryBalance({ address, token, chain });
       },
     },
   ];

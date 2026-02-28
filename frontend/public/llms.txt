@@ -60,6 +60,17 @@ Resolve ENS names to Ethereum addresses (and vice versa) with avatar and text re
 - Output (inside `output` field): `{ "name": "vitalik.eth", "address": "0xd8dA...", "avatar": "https://...", "records": { "description": "...", "url": "...", "com.twitter": "...", "com.github": "...", "org.telegram": null, "email": null } }`
 - Fields that cannot be resolved return `null`
 
+### ERC-20 Balance Lookup (Paid)
+
+Query native ETH or ERC-20 token balances for any wallet address on Ethereum or Base.
+
+- Endpoint: `POST /agent/services/erc20-balance/invoke`
+- Price: configurable per deployment (default $0.0005, USDC, via x402)
+- Input: `{ "address": "0xd8dA...", "token": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "chain": "base" }`
+- `address` is required; `token` is optional (omit for native ETH balance); `chain` is optional (default: "ethereum", also supports "base")
+- Output (inside `output` field): `{ "address": "0xd8dA...", "chain": "base", "token": "0x8335...", "symbol": "USDC", "name": "USD Coin", "decimals": 6, "balance": "5000000", "formatted": "5.0" }`
+- When `token` is omitted, returns native ETH balance with `token: "native"`
+
 ### Echo (Free)
 
 Free utility endpoint for connectivity and payload checks. No payment required.

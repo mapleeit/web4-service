@@ -19,6 +19,10 @@ import {
   EnsNotFoundError,
   EnsResolveApiError,
 } from "./ensResolve";
+import {
+  BalanceInputError,
+  BalanceRpcError,
+} from "./erc20Balance";
 import { createX402PaymentMiddleware } from "./x402Middleware";
 
 export interface CreateAppOptions {
@@ -177,6 +181,24 @@ export const createApp = (options: CreateAppOptions = {}) => {
         }
 
         if (error instanceof EnsResolveApiError) {
+          res.status(502).json({
+            error: "upstream_request_failed",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof BalanceInputError) {
+          res.status(400).json({
+            error: "invalid_service_input",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof BalanceRpcError) {
           res.status(502).json({
             error: "upstream_request_failed",
             serviceId,

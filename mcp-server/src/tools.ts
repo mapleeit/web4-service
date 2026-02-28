@@ -308,4 +308,77 @@ export function registerTools(server: McpServer): void {
       }
     }
   );
+
+  server.registerTool(
+    "web4_erc20_balance",
+    {
+      title: "ERC-20 Balance Lookup (Paid)",
+      description:
+        "Query native ETH or ERC-20 token balances for any wallet address. " +
+        "Supports Ethereum and Base chains. Returns formatted balance with token metadata. " +
+        "Omit 'token' for native ETH balance, or provide an ERC-20 contract address. " +
+        "Requires WEB4_WALLET_PRIVATE_KEY for x402 payment (USDC).",
+      inputSchema: {
+        address: z
+          .string()
+          .min(1, "Address must not be empty")
+          .describe("EVM wallet address to query (e.g. '0xd8dA...')"),
+        token: z
+          .string()
+          .optional()
+          .describe("ERC-20 contract address. Omit for native ETH balance."),
+        chain: z
+          .string()
+          .default("ethereum")
+          .describe("Chain to query: 'ethereum' (default) or 'base'"),
+      },
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      },
+    },
+    async ({ address, token, chain }) => {
+      try {
+        const result = await invokeService("erc20-balance", {
+          address,
+          ...(token ? { token } : {}),
+          ...(chain ? { chain } : {}),
+        });
+        const output = result.output as {
+          symbol?: string;
+          name?: string;
+          formatted?: string;
+          chain?: string;
+          address?: string;
+          token?: string;
+        };
+        const isNative = output.token === "native";
+        const lines = [
+          `**${output.name}** (${output.symbol})`,
+          `Balance: ${output.formatted} ${output.symbol}`,
+          `Chain: ${output.chain}`,
+          `Wallet: ${output.address}`,
+        ];
+        if (!isNative && output.token) {
+          lines.push(`Contract: ${output.token}`);
+        }
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+          structuredContent: result.output,
+        };
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+            },
+          ],
+        };
+      }
+    }
+  );
 }

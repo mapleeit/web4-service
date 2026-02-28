@@ -30,6 +30,11 @@ const DEFAULT_INPUTS: Record<string, string> = {
     2,
   ),
   "ens-resolve": JSON.stringify({ name: "vitalik.eth" }, null, 2),
+  "erc20-balance": JSON.stringify(
+    { address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045", chain: "ethereum" },
+    null,
+    2,
+  ),
 };
 
 type ParsedPayment = ReturnType<typeof parsePaymentRequired>;
@@ -490,6 +495,8 @@ function ResultDisplay({
       return <SearchResult output={output} />;
     case "ens-resolve":
       return <EnsResult output={output} />;
+    case "erc20-balance":
+      return <BalanceResult output={output} />;
     default:
       return <RawJson body={body} />;
   }
@@ -645,6 +652,49 @@ function EnsResult({ output }: { output: Record<string, unknown> }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function BalanceResult({ output }: { output: Record<string, unknown> }) {
+  const formatted = String(output.formatted ?? "0");
+  const symbol = String(output.symbol ?? "");
+  const name = String(output.name ?? "");
+  const chain = String(output.chain ?? "");
+  const address = output.address ? String(output.address) : null;
+  const token = output.token ? String(output.token) : null;
+  const isNative = token === "native";
+
+  return (
+    <div className="flex h-full flex-col justify-center gap-3">
+      <div className="flex items-baseline gap-2">
+        <span className="text-xs font-semibold uppercase text-zinc-500">
+          {symbol}
+        </span>
+        <span className="text-sm text-zinc-400">{name}</span>
+        <span className="rounded-md border border-border px-1.5 py-0.5 text-[10px] text-zinc-500">
+          {chain}
+        </span>
+      </div>
+
+      <div className="text-2xl font-bold text-zinc-100">
+        {Number(formatted) < 0.0001 && Number(formatted) > 0
+          ? `< 0.0001 ${symbol}`
+          : `${Number(formatted).toLocaleString(undefined, { maximumFractionDigits: 6 })} ${symbol}`}
+      </div>
+
+      <div className="flex flex-col gap-1 text-xs text-zinc-500">
+        {address && (
+          <span>
+            Wallet: <span className="font-mono">{address.slice(0, 10)}...{address.slice(-6)}</span>
+          </span>
+        )}
+        {!isNative && token && (
+          <span>
+            Contract: <span className="font-mono">{token.slice(0, 10)}...{token.slice(-6)}</span>
+          </span>
+        )}
+      </div>
     </div>
   );
 }

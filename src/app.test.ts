@@ -3,6 +3,8 @@ import { createApp } from "./app";
 import { clearTokenPriceCache } from "./tokenPrice";
 import { clearEnsCache, resetEnsClient, EnsNotFoundError, EnsResolveApiError } from "./ensResolve";
 import * as ensResolveModule from "./ensResolve";
+import { clearBalanceCache, BalanceInputError, BalanceRpcError } from "./erc20Balance";
+import * as erc20BalanceModule from "./erc20Balance";
 
 const originalFetch = globalThis.fetch;
 
@@ -30,6 +32,7 @@ afterEach(() => {
   clearTokenPriceCache();
   clearEnsCache();
   resetEnsClient();
+  clearBalanceCache();
   delete process.env.ETHEREUM_RPC_URL;
   delete process.env.X402_PRICE_ENS_RESOLVE;
   delete process.env.PERPLEXITY_API_KEY;
@@ -44,6 +47,8 @@ afterEach(() => {
   delete process.env.X402_PRICE;
   delete process.env.X402_PRICE_PERPLEXITY_SEARCH;
   delete process.env.X402_PRICE_TOKEN_PRICE;
+  delete process.env.X402_PRICE_ERC20_BALANCE;
+  delete process.env.BASE_RPC_URL;
   delete process.env.X402_PAYMENT_OPTIONS;
 });
 
@@ -756,6 +761,118 @@ describe("POST /agent/services/ens-resolve/invoke", () => {
     expect(ensService).toBeDefined();
     expect(ensService.name).toBe("ENS Resolution (Paid)");
     expect(ensService.payment).toEqual(
+      expect.objectContaining({
+        scheme: "exact",
+        asset: "USDC",
+        price: "$0.0005",
+      })
+    );
+  });
+});
+
+describe("POST /agent/services/erc20-balance/invoke", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("returns native ETH balance", async () => {
+    jest.spyOn(erc20BalanceModule, "queryBalance").mockResolvedValue({
+      address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      chain: "ethereum",
+      token: "native",
+      symbol: "ETH",
+      name: "Ether",
+      decimals: 18,
+      balance: "1500000000000000000",
+      formatted: "1.5",
+    });
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/erc20-balance/invoke")
+      .send({ address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.serviceId).toBe("erc20-balance");
+    expect(res.body.output.token).toBe("native");
+    expect(res.body.output.symbol).toBe("ETH");
+    expect(res.body.output.formatted).toBe("1.5");
+  });
+
+  it("returns ERC-20 token balance", async () => {
+    jest.spyOn(erc20BalanceModule, "queryBalance").mockResolvedValue({
+      address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      chain: "base",
+      token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+      symbol: "USDC",
+      name: "USD Coin",
+      decimals: 6,
+      balance: "5000000",
+      formatted: "5.0",
+    });
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/erc20-balance/invoke")
+      .send({
+        address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+        token: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+        chain: "base",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.output.symbol).toBe("USDC");
+    expect(res.body.output.chain).toBe("base");
+    expect(res.body.output.formatted).toBe("5.0");
+  });
+
+  it("returns 400 when address is missing", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/erc20-balance/invoke")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_service_input");
+  });
+
+  it("returns 400 for invalid address", async () => {
+    jest.spyOn(erc20BalanceModule, "queryBalance").mockRejectedValue(
+      new BalanceInputError("A valid EVM address is required")
+    );
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/erc20-balance/invoke")
+      .send({ address: "not-an-address" });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_service_input");
+  });
+
+  it("returns 502 when RPC fails", async () => {
+    jest.spyOn(erc20BalanceModule, "queryBalance").mockRejectedValue(
+      new BalanceRpcError("RPC error fetching native balance: connection refused")
+    );
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/erc20-balance/invoke")
+      .send({ address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("upstream_request_failed");
+  });
+
+  it("appears in service catalog with payment metadata", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+
+    const balanceService = res.body.services.find(
+      (s: { id: string }) => s.id === "erc20-balance"
+    );
+
+    expect(balanceService).toBeDefined();
+    expect(balanceService.name).toBe("ERC-20 Balance Lookup (Paid)");
+    expect(balanceService.payment).toEqual(
       expect.objectContaining({
         scheme: "exact",
         asset: "USDC",

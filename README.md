@@ -58,6 +58,21 @@ npm run dev
   - `marketCap`, `volume24h` — market data (nullable)
   - `lastUpdated` — ISO 8601 timestamp
 
+## Paid service: ERC-20 balance lookup
+
+`erc20-balance` queries native ETH or ERC-20 token balances on Ethereum or Base:
+
+- Route: `POST /agent/services/erc20-balance/invoke`
+- Input:
+  - `address` (required) — EVM wallet address to query
+  - `token` (optional) — ERC-20 contract address. Omit for native ETH balance.
+  - `chain` (optional, default `ethereum`) — `ethereum` or `base`
+- Output:
+  - `address`, `chain`, `token` — query identifiers (`token` is `"native"` when querying ETH)
+  - `symbol`, `name`, `decimals` — token metadata
+  - `balance` — raw balance as string
+  - `formatted` — human-readable balance
+
 ## Paid service: Perplexity search
 
 `perplexity-search` is now a paid agent endpoint:
@@ -131,6 +146,7 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 | `perplexity-search` | `X402_PRICE_PERPLEXITY_SEARCH` | `$0.03` |
 | `token-price` | `X402_PRICE_TOKEN_PRICE` | `$0.0005` |
 | `ens-resolve` | `X402_PRICE_ENS_RESOLVE` | `$0.0005` |
+| `erc20-balance` | `X402_PRICE_ERC20_BALANCE` | `$0.0005` |
 
 ## Optional environment
 
@@ -145,8 +161,10 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 - `X402_PRICE_PERPLEXITY_SEARCH` - override price for perplexity-search
 - `X402_PRICE_TOKEN_PRICE` - override price for token-price (code default: `$0.0005`)
 - `X402_PRICE_ENS_RESOLVE` - override price for ens-resolve (code default: `$0.0005`)
+- `X402_PRICE_ERC20_BALANCE` - override price for erc20-balance (code default: `$0.0005`)
 - `X402_FACILITATOR_URL` - facilitator URL (default: `https://facilitator.openx402.ai`)
-- `ETHEREUM_RPC_URL` - Ethereum mainnet RPC URL for ENS resolution (default: `https://ethereum-rpc.publicnode.com`)
+- `ETHEREUM_RPC_URL` - Ethereum mainnet RPC URL for ENS resolution and balance queries (default: `https://ethereum-rpc.publicnode.com`)
+- `BASE_RPC_URL` - Base mainnet RPC URL for balance queries (default: `https://base-rpc.publicnode.com`)
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.
