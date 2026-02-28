@@ -32,7 +32,7 @@ const features = [
   {
     title: "Free & Paid Tiers",
     description:
-      "Free echo endpoint for testing, paid services like web search and token prices for real workloads.",
+      "Free echo endpoint for testing, paid services like web search, token prices, and ENS resolution for real workloads.",
     icon: (
       <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -50,12 +50,12 @@ const features = [
     ),
   },
   {
-    title: ".well-known Discovery",
+    title: "ENS Resolution",
     description:
-      "Auto-discoverable at /.well-known/agent-services. Standard-compliant service manifest for agents.",
+      "Resolve ENS names to addresses and back. Get avatars, social handles, and text records in one call.",
     icon: (
       <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),
   },
@@ -78,9 +78,9 @@ export default function Features() {
           {features.map((feature) => (
             <div
               key={feature.title}
-              className="group rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-6 transition-all duration-300 hover:border-[var(--color-border-hover)] hover:bg-[var(--color-surface-hover)] glow-hover"
+              className="group rounded-xl border border-border bg-surface p-6 transition-all duration-300 hover:border-border-hover hover:bg-surface-hover glow-hover"
             >
-              <div className="mb-4 inline-flex rounded-lg bg-gradient-to-br from-blue-500/10 to-violet-500/10 p-2.5 text-blue-400">
+              <div className="mb-4 inline-flex rounded-lg bg-linear-to-br from-blue-500/10 to-violet-500/10 p-2.5 text-blue-400">
                 {feature.icon}
               </div>
               <h3 className="mb-2 text-lg font-semibold text-zinc-100">
