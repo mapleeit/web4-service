@@ -1,6 +1,8 @@
 import request from "supertest";
 import { createApp } from "./app";
 import { clearTokenPriceCache } from "./tokenPrice";
+import { clearEnsCache, resetEnsClient, EnsNotFoundError, EnsResolveApiError } from "./ensResolve";
+import * as ensResolveModule from "./ensResolve";
 
 const originalFetch = globalThis.fetch;
 
@@ -26,6 +28,10 @@ beforeEach(() => {
 afterEach(() => {
   setFetchMock(originalFetch);
   clearTokenPriceCache();
+  clearEnsCache();
+  resetEnsClient();
+  delete process.env.ETHEREUM_RPC_URL;
+  delete process.env.X402_PRICE_ENS_RESOLVE;
   delete process.env.PERPLEXITY_API_KEY;
   delete process.env.PERPLEXITY_MODEL;
   delete process.env.PERPLEXITY_API_PROVIDER;
@@ -648,5 +654,113 @@ describe("POST /agent/services/token-price/invoke", () => {
 
     // search + price on first call; both cached on second call
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("POST /agent/services/ens-resolve/invoke", () => {
+  afterEach(() => jest.restoreAllMocks());
+
+  it("resolves an ENS name to address with records", async () => {
+    jest.spyOn(ensResolveModule, "resolveEns").mockResolvedValue({
+      name: "vitalik.eth",
+      address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      avatar: "https://example.com/avatar.png",
+      records: {
+        description: "Ethereum co-founder",
+        url: "https://vitalik.eth.limo",
+        "com.twitter": "VitalikButerin",
+        "com.github": "vbuterin",
+        "org.telegram": null,
+        email: null,
+      },
+    });
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/ens-resolve/invoke")
+      .send({ name: "vitalik.eth" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.serviceId).toBe("ens-resolve");
+    expect(res.body.output.name).toBe("vitalik.eth");
+    expect(res.body.output.address).toBe("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+    expect(res.body.output.avatar).toBe("https://example.com/avatar.png");
+    expect(res.body.output.records["com.twitter"]).toBe("VitalikButerin");
+    expect(res.body.output.records.description).toBe("Ethereum co-founder");
+  });
+
+  it("resolves an address to ENS name via reverse resolution", async () => {
+    jest.spyOn(ensResolveModule, "resolveEns").mockResolvedValue({
+      name: "vitalik.eth",
+      address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
+      avatar: null,
+      records: {},
+    });
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/ens-resolve/invoke")
+      .send({ address: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.output.name).toBe("vitalik.eth");
+    expect(res.body.output.address).toBe("0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045");
+  });
+
+  it("returns 404 when ENS name is not found", async () => {
+    jest.spyOn(ensResolveModule, "resolveEns").mockRejectedValue(
+      new EnsNotFoundError("nonexistent.eth")
+    );
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/ens-resolve/invoke")
+      .send({ name: "nonexistent.eth" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("ens_not_found");
+  });
+
+  it("returns 400 when neither name nor address is provided", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/ens-resolve/invoke")
+      .send({});
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_service_input");
+  });
+
+  it("returns 502 when RPC call fails", async () => {
+    jest.spyOn(ensResolveModule, "resolveEns").mockRejectedValue(
+      new EnsResolveApiError("RPC error during forward resolution: connection refused")
+    );
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/ens-resolve/invoke")
+      .send({ name: "vitalik.eth" });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("upstream_request_failed");
+  });
+
+  it("appears in service catalog with payment metadata", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+
+    const ensService = res.body.services.find(
+      (s: { id: string }) => s.id === "ens-resolve"
+    );
+
+    expect(ensService).toBeDefined();
+    expect(ensService.name).toBe("ENS Resolution (Paid)");
+    expect(ensService.payment).toEqual(
+      expect.objectContaining({
+        scheme: "exact",
+        asset: "USDC",
+        price: "$0.0005",
+      })
+    );
   });
 });

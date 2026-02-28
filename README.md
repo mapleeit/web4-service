@@ -29,6 +29,20 @@ npm run dev
 - `GET /.well-known/agent-services` — Discovery manifest for agent clients
 - `POST /agent/services/:serviceId/invoke` — Invoke a service (`x402` protects paid routes)
 
+## Paid service: ENS resolution
+
+`ens-resolve` resolves ENS names and Ethereum addresses:
+
+- Route: `POST /agent/services/ens-resolve/invoke`
+- Input:
+  - `name` — ENS name to resolve (e.g. `vitalik.eth`)
+  - `address` — Ethereum address for reverse resolution
+  - At least one is required; when both are provided, `name` takes priority
+- Output:
+  - `name`, `address` — resolved ENS name and address
+  - `avatar` — ENS avatar URL (nullable)
+  - `records` — text records: `description`, `url`, `com.twitter`, `com.github`, `org.telegram`, `email` (nullable)
+
 ## Paid service: Token price lookup
 
 `token-price` is a paid agent endpoint powered by CoinGecko:
@@ -106,7 +120,7 @@ All networks must be EVM CAIP-2 identifiers supported by your configured facilit
 Price is resolved per service in this order:
 
 1. **Service-specific env var** `X402_PRICE_{SERVICE_ID}` (e.g. `X402_PRICE_TOKEN_PRICE`)
-2. **Code-level default** (e.g. token-price defaults to `$0.001`)
+2. **Code-level default** (e.g. token-price defaults to `$0.0005`)
 3. **Global env var** `X402_PRICE`
 4. **Hardcoded fallback** `$0.02`
 
@@ -116,6 +130,7 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 |---|---|---|
 | `perplexity-search` | `X402_PRICE_PERPLEXITY_SEARCH` | `$0.03` |
 | `token-price` | `X402_PRICE_TOKEN_PRICE` | `$0.0005` |
+| `ens-resolve` | `X402_PRICE_ENS_RESOLVE` | `$0.0005` |
 
 ## Optional environment
 
@@ -129,7 +144,9 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 - `X402_PRICE` - global default price for all services (default: `$0.02`)
 - `X402_PRICE_PERPLEXITY_SEARCH` - override price for perplexity-search
 - `X402_PRICE_TOKEN_PRICE` - override price for token-price (code default: `$0.0005`)
+- `X402_PRICE_ENS_RESOLVE` - override price for ens-resolve (code default: `$0.0005`)
 - `X402_FACILITATOR_URL` - facilitator URL (default: `https://facilitator.openx402.ai`)
+- `ETHEREUM_RPC_URL` - Ethereum mainnet RPC URL for ENS resolution (default: `https://ethereum-rpc.publicnode.com`)
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.

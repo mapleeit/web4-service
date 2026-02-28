@@ -18,6 +18,11 @@ const DEFAULT_INPUTS: Record<string, string> = {
     null,
     2,
   ),
+  "ens-resolve": JSON.stringify(
+    { name: "vitalik.eth" },
+    null,
+    2,
+  ),
 };
 
 export default function Playground() {

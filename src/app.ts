@@ -15,6 +15,10 @@ import {
   TokenNotFoundError,
   TokenPriceApiError,
 } from "./tokenPrice";
+import {
+  EnsNotFoundError,
+  EnsResolveApiError,
+} from "./ensResolve";
 import { createX402PaymentMiddleware } from "./x402Middleware";
 
 export interface CreateAppOptions {
@@ -159,6 +163,24 @@ export const createApp = (options: CreateAppOptions = {}) => {
             error: "upstream_request_failed",
             serviceId,
             upstreamStatusCode: error.statusCode,
+          });
+          return;
+        }
+
+        if (error instanceof EnsNotFoundError) {
+          res.status(404).json({
+            error: "ens_not_found",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof EnsResolveApiError) {
+          res.status(502).json({
+            error: "upstream_request_failed",
+            serviceId,
+            message: error.message,
           });
           return;
         }

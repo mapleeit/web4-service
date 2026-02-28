@@ -33,7 +33,7 @@ Error responses use the format `{ "error": "error_code", "serviceId": "..." }` w
 AI-powered web search via Perplexity. Returns answers with source citations.
 
 - Endpoint: `POST /agent/services/perplexity-search/invoke`
-- Price: configurable per deployment (default $0.02, USDC, via x402)
+- Price: configurable per deployment (default $0.03, USDC, via x402)
 - Input: `{ "query": "your search query", "model": "optional model override" }`
 - Output (inside `output` field): `{ "answer": "...", "citations": ["url1", "url2"], "model": "sonar-pro" }`
 - `query` is required; `model` is optional
@@ -48,6 +48,17 @@ Real-time token price lookup via CoinGecko. Accepts token names, symbols, or Coi
 - `token` is required (name, symbol like "BTC", or CoinGecko ID like "bitcoin"); `currency` is optional (default: "usd")
 - Output (inside `output` field): `{ "id": "bitcoin", "symbol": "BTC", "name": "Bitcoin", "price": 97500.42, "currency": "usd", "change24h": 2.35, "marketCap": 1920000000000, "volume24h": 45000000000, "lastUpdated": "2025-01-01T00:00:00.000Z" }`
 - `change24h`, `marketCap`, and `volume24h` may be `null` if unavailable
+
+### ENS Resolution (Paid)
+
+Resolve ENS names to Ethereum addresses (and vice versa) with avatar and text records.
+
+- Endpoint: `POST /agent/services/ens-resolve/invoke`
+- Price: configurable per deployment (default $0.0005, USDC, via x402)
+- Input: `{ "name": "vitalik.eth" }` for forward resolution, or `{ "address": "0xd8dA..." }` for reverse resolution
+- At least one of `name` or `address` is required; when both are provided, `name` takes priority
+- Output (inside `output` field): `{ "name": "vitalik.eth", "address": "0xd8dA...", "avatar": "https://...", "records": { "description": "...", "url": "...", "com.twitter": "...", "com.github": "...", "org.telegram": null, "email": null } }`
+- Fields that cannot be resolved return `null`
 
 ### Echo (Free)
 

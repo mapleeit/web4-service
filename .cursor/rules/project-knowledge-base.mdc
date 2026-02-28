@@ -32,6 +32,7 @@ web4-service/
 │   ├── agentServices.ts          # Service registry: definitions, payment terms, invocation
 │   ├── perplexitySearch.ts       # Perplexity API integration (direct + OpenRouter proxy)
 │   ├── tokenPrice.ts            # CoinGecko token price lookup (search + simple/price)
+│   ├── ensResolve.ts            # ENS resolution via viem (forward, reverse, text records)
 │   ├── x402Middleware.ts         # x402 payment middleware factory
 │   └── app.test.ts               # Backend integration tests (Jest)
 ├── frontend/                     # React SPA (served as static files)
@@ -109,7 +110,7 @@ Success: `{ serviceId: string, output: { ...service fields } }`
 
 Errors: `{ error: "error_code", serviceId?: string, message?: string }`
 
-Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment_required` (402), `token_not_found` (404), `service_not_found` (404), `upstream_request_failed` (502), `service_unavailable` (503), `service_execution_error` (500).
+Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment_required` (402), `token_not_found` (404), `ens_not_found` (404), `service_not_found` (404), `upstream_request_failed` (502), `service_unavailable` (503), `service_execution_error` (500).
 
 ## Current Services
 
@@ -139,6 +140,18 @@ Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment
 - **No API key required** — uses CoinGecko free tier (~10-30 req/min rate limit)
 - **Caching**: Two-layer in-memory TTL cache — search results cached 5 min (`searchCache`), price data cached 30 s (`priceCache`). Call `clearTokenPriceCache()` in tests to reset.
 - **Error classes**: `TokenNotFoundError` (→ 404), `TokenPriceApiError` (→ 502), `AgentServiceInputError` (→ 400)
+
+### 4. ens-resolve (Paid)
+- **Endpoint**: `POST /agent/services/ens-resolve/invoke`
+- **Input**: `{ name?: string, address?: string }` — at least one required; `name` takes priority
+- **Output**: `{ name, address, avatar, records: { description, url, com.twitter, com.github, org.telegram, email } }`
+- **Price**: `X402_PRICE_ENS_RESOLVE` → code default `$0.0005` → global `X402_PRICE` → `$0.02`
+- **Implementation** (`src/ensResolve.ts`): Uses viem `publicClient` on Ethereum mainnet to call ENS contracts
+- **RPC**: `ETHEREUM_RPC_URL` env var, fallback `https://ethereum-rpc.publicnode.com`
+- **Forward resolution**: `getEnsAddress()` + `getEnsAvatar()` + `getEnsText()` for 6 record keys
+- **Reverse resolution**: `getEnsName()` + avatar + text records
+- **Caching**: In-memory TTL cache (5 min), keyed on normalized input. `clearEnsCache()` / `resetEnsClient()` for tests.
+- **Error classes**: `EnsNotFoundError` (→ 404), `EnsResolveApiError` (→ 502), `AgentServiceInputError` (→ 400)
 
 ## x402 Payment Flow
 
@@ -223,7 +236,9 @@ Vite dev server proxies API requests to backend on port 3000.
 | `X402_PRICE` | `$0.02` | Global default price (USDC), used when no per-service price is set |
 | `X402_PRICE_PERPLEXITY_SEARCH` | — | Per-service price override for perplexity-search (code default: `$0.03`) |
 | `X402_PRICE_TOKEN_PRICE` | — | Per-service price override for token-price (code default: `$0.0005`) |
+| `X402_PRICE_ENS_RESOLVE` | — | Per-service price override for ens-resolve (code default: `$0.0005`) |
 | `X402_FACILITATOR_URL` | `https://facilitator.payai.network` | Facilitator endpoint |
+| `ETHEREUM_RPC_URL` | `https://ethereum-rpc.publicnode.com` | Ethereum mainnet RPC for ENS resolution |
 | `PERPLEXITY_API_PROVIDER` | auto-detect | `perplexity` or `openrouter` |
 | `PERPLEXITY_MODEL` | provider default | Model override |
 | `PERPLEXITY_CHAT_COMPLETIONS_URL` | `https://api.perplexity.ai/chat/completions` | API URL override |

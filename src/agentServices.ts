@@ -1,5 +1,6 @@
 import { runPerplexitySearch } from "./perplexitySearch";
 import { lookupTokenPrice } from "./tokenPrice";
+import { resolveEns } from "./ensResolve";
 
 interface PaymentOption {
   network: `${string}:${string}`;
@@ -169,6 +170,7 @@ const createAgentServices = (): AgentService[] => {
 
   const searchTerms = buildPaymentTerms("perplexity-search", "$0.03");
   const tokenPriceTerms = buildPaymentTerms("token-price", "$0.0005");
+  const ensTerms = buildPaymentTerms("ens-resolve", "$0.0005");
 
   return [
     {
@@ -276,6 +278,58 @@ const createAgentServices = (): AgentService[] => {
 
         const currency = asNonEmptyString(input.currency);
         return lookupTokenPrice({ token, currency });
+      },
+    },
+    {
+      id: "ens-resolve",
+      name: "ENS Resolution (Paid)",
+      description:
+        "Resolve ENS names to addresses (and vice versa) with avatar and text records.",
+      endpoint: "/agent/services/ens-resolve/invoke",
+      inputSchema: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "ENS name to resolve (e.g. 'vitalik.eth')",
+          },
+          address: {
+            type: "string",
+            description: "Ethereum address for reverse resolution (e.g. '0xd8dA...')",
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          name: { type: "string", nullable: true },
+          address: { type: "string", nullable: true },
+          avatar: { type: "string", nullable: true },
+          records: {
+            type: "object",
+            properties: {
+              description: { type: "string", nullable: true },
+              url: { type: "string", nullable: true },
+              "com.twitter": { type: "string", nullable: true },
+              "com.github": { type: "string", nullable: true },
+              "org.telegram": { type: "string", nullable: true },
+              email: { type: "string", nullable: true },
+            },
+          },
+        },
+      },
+      payment: ensTerms.primary,
+      paymentOptions: ensTerms.options,
+      handler: async (input) => {
+        const name = asNonEmptyString(input.name);
+        const address = asNonEmptyString(input.address);
+        if (!name && !address) {
+          throw new AgentServiceInputError(
+            "At least one of 'name' or 'address' must be provided"
+          );
+        }
+
+        return resolveEns({ name, address });
       },
     },
   ];
