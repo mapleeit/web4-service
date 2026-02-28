@@ -100,12 +100,38 @@ export function parsePaymentRequired(
   }
 }
 
+export interface SettlementInfo {
+  transaction: string;
+  network: string;
+  payer: string;
+}
+
+export interface PayAndRetryResult extends InvokeResult {
+  settlement?: SettlementInfo;
+}
+
+function parseSettlementHeader(response: Response): SettlementInfo | undefined {
+  try {
+    const header = response.headers.get("PAYMENT-RESPONSE");
+    if (!header) return undefined;
+    const data = JSON.parse(safeBase64Decode(header)) as Record<string, unknown>;
+    if (!data.transaction) return undefined;
+    return {
+      transaction: String(data.transaction),
+      network: String(data.network ?? ""),
+      payer: String(data.payer ?? ""),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export async function payAndRetry(
   serviceId: string,
   input: Record<string, unknown>,
   walletAddress: `0x${string}`,
   parsed: ParsedPaymentRequired
-): Promise<InvokeResult> {
+): Promise<PayAndRetryResult> {
   const { requirements, selected } = parsed;
   const cId = networkToChainId(selected.network);
   const chain = chainIdToChain(cId);
@@ -173,6 +199,7 @@ export async function payAndRetry(
     body: JSON.stringify(input),
   });
 
+  const settlement = parseSettlementHeader(paidRes);
   const paidBody = await paidRes.json().catch(() => null);
-  return { status: paidRes.status, body: paidBody };
+  return { status: paidRes.status, body: paidBody, settlement };
 }
