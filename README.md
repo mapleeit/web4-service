@@ -29,6 +29,21 @@ npm run dev
 - `GET /.well-known/agent-services` — Discovery manifest for agent clients
 - `POST /agent/services/:serviceId/invoke` — Invoke a service (`x402` protects paid routes)
 
+## Paid service: Token price lookup
+
+`token-price` is a paid agent endpoint powered by CoinGecko:
+
+- Route: `POST /agent/services/token-price/invoke`
+- Input:
+  - `token` (required) — token name, symbol (e.g. `BTC`), or CoinGecko ID (e.g. `bitcoin`)
+  - `currency` (optional, default `usd`)
+- Output:
+  - `id`, `symbol`, `name` — token identifiers
+  - `price` — current price in requested currency
+  - `change24h` — 24-hour price change percentage (nullable)
+  - `marketCap`, `volume24h` — market data (nullable)
+  - `lastUpdated` — ISO 8601 timestamp
+
 ## Paid service: Perplexity search
 
 `perplexity-search` is now a paid agent endpoint:

@@ -1,4 +1,5 @@
 import { runPerplexitySearch } from "./perplexitySearch";
+import { lookupTokenPrice } from "./tokenPrice";
 
 interface PaymentOption {
   network: `${string}:${string}`;
@@ -219,6 +220,53 @@ const createAgentServices = (): AgentService[] => {
 
         const model = asNonEmptyString(input.model);
         return runPerplexitySearch({ query, model });
+      },
+    },
+    {
+      id: "token-price",
+      name: "Token Price Lookup (Paid)",
+      description:
+        "Real-time token price lookup via CoinGecko. Accepts token names, symbols, or CoinGecko IDs.",
+      endpoint: "/agent/services/token-price/invoke",
+      inputSchema: {
+        type: "object",
+        required: ["token"],
+        properties: {
+          token: {
+            type: "string",
+            description:
+              "Token name, symbol, or CoinGecko ID (e.g. 'bitcoin', 'BTC', 'ethereum')",
+          },
+          currency: {
+            type: "string",
+            description: "Quote currency (default: 'usd')",
+          },
+        },
+      },
+      outputSchema: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          symbol: { type: "string" },
+          name: { type: "string" },
+          price: { type: "number" },
+          currency: { type: "string" },
+          change24h: { type: "number", nullable: true },
+          marketCap: { type: "number", nullable: true },
+          volume24h: { type: "number", nullable: true },
+          lastUpdated: { type: "string", format: "date-time" },
+        },
+      },
+      payment: paymentTerms.primary,
+      paymentOptions: paymentTerms.options,
+      handler: async (input) => {
+        const token = asNonEmptyString(input.token);
+        if (!token) {
+          throw new AgentServiceInputError("token must be a non-empty string");
+        }
+
+        const currency = asNonEmptyString(input.currency);
+        return lookupTokenPrice({ token, currency });
       },
     },
   ];

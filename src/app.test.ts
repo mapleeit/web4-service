@@ -1,5 +1,6 @@
 import request from "supertest";
 import { createApp } from "./app";
+import { clearTokenPriceCache } from "./tokenPrice";
 
 const originalFetch = globalThis.fetch;
 
@@ -24,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   setFetchMock(originalFetch);
+  clearTokenPriceCache();
   delete process.env.PERPLEXITY_API_KEY;
   delete process.env.PERPLEXITY_MODEL;
   delete process.env.PERPLEXITY_API_PROVIDER;
@@ -382,4 +384,209 @@ describe("POST /agent/services/:serviceId/invoke", () => {
     );
   });
 
+});
+
+describe("POST /agent/services/token-price/invoke", () => {
+  it("returns token price data from CoinGecko", async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/search")) {
+          return new Response(
+            JSON.stringify({
+              coins: [
+                { id: "bitcoin", symbol: "btc", name: "Bitcoin" },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            bitcoin: {
+              usd: 97500.42,
+              usd_24h_change: 2.35,
+              usd_market_cap: 1920000000000,
+              usd_24h_vol: 45000000000,
+              last_updated_at: 1700000000,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      });
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "bitcoin" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.serviceId).toBe("token-price");
+    expect(res.body.output.id).toBe("bitcoin");
+    expect(res.body.output.symbol).toBe("BTC");
+    expect(res.body.output.name).toBe("Bitcoin");
+    expect(res.body.output.price).toBe(97500.42);
+    expect(res.body.output.currency).toBe("usd");
+    expect(res.body.output.change24h).toBe(2.35);
+    expect(res.body.output.marketCap).toBe(1920000000000);
+    expect(res.body.output.volume24h).toBe(45000000000);
+    expect(typeof res.body.output.lastUpdated).toBe("string");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("resolves token symbols via CoinGecko search", async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/search")) {
+          return new Response(
+            JSON.stringify({
+              coins: [
+                { id: "ethereum", symbol: "eth", name: "Ethereum" },
+                { id: "ethereum-classic", symbol: "etc", name: "Ethereum Classic" },
+              ],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            ethereum: {
+              eur: 2100.5,
+              eur_24h_change: -1.2,
+              eur_market_cap: 250000000000,
+              eur_24h_vol: 12000000000,
+              last_updated_at: 1700000000,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      });
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "ETH", currency: "eur" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.output.id).toBe("ethereum");
+    expect(res.body.output.symbol).toBe("ETH");
+    expect(res.body.output.currency).toBe("eur");
+    expect(res.body.output.price).toBe(2100.5);
+  });
+
+  it("returns 404 when token is not found", async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ coins: [] }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "nonexistent_token_xyz" });
+
+    expect(res.status).toBe(404);
+    expect(res.body.error).toBe("token_not_found");
+  });
+
+  it("returns 400 when token is empty", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "   " });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe("invalid_service_input");
+  });
+
+  it("returns 502 when CoinGecko API fails", async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockResolvedValue(
+        new Response("rate limited", { status: 429 })
+      );
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "bitcoin" });
+
+    expect(res.status).toBe(502);
+    expect(res.body.error).toBe("upstream_request_failed");
+    expect(res.body.upstreamStatusCode).toBe(429);
+  });
+
+  it("appears in service catalog with payment metadata", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+
+    const tokenService = res.body.services.find(
+      (service: { id: string }) => service.id === "token-price"
+    );
+
+    expect(tokenService).toBeDefined();
+    expect(tokenService.name).toBe("Token Price Lookup (Paid)");
+    expect(tokenService.payment).toEqual(
+      expect.objectContaining({
+        scheme: "exact",
+        asset: "USDC",
+      })
+    );
+  });
+
+  it("serves cached results on repeated lookups", async () => {
+    const fetchMock = jest
+      .fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>()
+      .mockImplementation(async (input) => {
+        const url = typeof input === "string" ? input : (input as Request).url;
+        if (url.includes("/search")) {
+          return new Response(
+            JSON.stringify({
+              coins: [{ id: "bitcoin", symbol: "btc", name: "Bitcoin" }],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          );
+        }
+        return new Response(
+          JSON.stringify({
+            bitcoin: {
+              usd: 65000,
+              usd_24h_change: 1.0,
+              usd_market_cap: 1300000000000,
+              usd_24h_vol: 40000000000,
+              last_updated_at: 1700000000,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      });
+    setFetchMock(fetchMock as unknown as typeof fetch);
+
+    const app = createApp({ enableX402: false });
+
+    const first = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "bitcoin" });
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post("/agent/services/token-price/invoke")
+      .send({ token: "bitcoin" });
+    expect(second.status).toBe(200);
+    expect(second.body.output.price).toBe(65000);
+
+    // search + price on first call; both cached on second call
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });

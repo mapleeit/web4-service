@@ -32,7 +32,7 @@ const features = [
   {
     title: "Free & Paid Tiers",
     description:
-      "Free echo endpoint for testing, paid Perplexity search for real workloads. Mix freely.",
+      "Free echo endpoint for testing, paid services like web search and token prices for real workloads.",
     icon: (
       <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
@@ -40,12 +40,12 @@ const features = [
     ),
   },
   {
-    title: "Perplexity Search",
+    title: "Token Price Oracle",
     description:
-      "AI-powered web search via Perplexity or OpenRouter. Real-time answers with source citations.",
+      "Real-time crypto prices via CoinGecko — look up any token by name or symbol with 24h change and market data.",
     icon: (
       <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2 11a2 2 0 012-2h1a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2v-6zM9 7a2 2 0 012-2h1a2 2 0 012 2v10a2 2 0 01-2 2h-1a2 2 0 01-2-2V7zM16 4a2 2 0 012-2h1a2 2 0 012 2v13a2 2 0 01-2 2h-1a2 2 0 01-2-2V4z" />
       </svg>
     ),
   },

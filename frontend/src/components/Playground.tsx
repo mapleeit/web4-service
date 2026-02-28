@@ -13,6 +13,11 @@ const DEFAULT_INPUTS: Record<string, string> = {
     null,
     2,
   ),
+  "token-price": JSON.stringify(
+    { token: "bitcoin", currency: "usd" },
+    null,
+    2,
+  ),
 };
 
 export default function Playground() {

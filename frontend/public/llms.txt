@@ -38,6 +38,17 @@ AI-powered web search via Perplexity. Returns answers with source citations.
 - Output (inside `output` field): `{ "answer": "...", "citations": ["url1", "url2"], "model": "sonar-pro" }`
 - `query` is required; `model` is optional
 
+### Token Price Lookup (Paid)
+
+Real-time token price lookup via CoinGecko. Accepts token names, symbols, or CoinGecko IDs.
+
+- Endpoint: `POST /agent/services/token-price/invoke`
+- Price: configurable per deployment (USDC, via x402)
+- Input: `{ "token": "bitcoin", "currency": "usd" }`
+- `token` is required (name, symbol like "BTC", or CoinGecko ID like "bitcoin"); `currency` is optional (default: "usd")
+- Output (inside `output` field): `{ "id": "bitcoin", "symbol": "BTC", "name": "Bitcoin", "price": 97500.42, "currency": "usd", "change24h": 2.35, "marketCap": 1920000000000, "volume24h": 45000000000, "lastUpdated": "2025-01-01T00:00:00.000Z" }`
+- `change24h`, `marketCap`, and `volume24h` may be `null` if unavailable
+
 ### Echo (Free)
 
 Free utility endpoint for connectivity and payload checks. No payment required.

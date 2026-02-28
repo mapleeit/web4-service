@@ -11,6 +11,10 @@ import {
   MissingPerplexityApiKeyError,
   PerplexityApiRequestError,
 } from "./perplexitySearch";
+import {
+  TokenNotFoundError,
+  TokenPriceApiError,
+} from "./tokenPrice";
 import { createX402PaymentMiddleware } from "./x402Middleware";
 
 export interface CreateAppOptions {
@@ -133,6 +137,24 @@ export const createApp = (options: CreateAppOptions = {}) => {
         }
 
         if (error instanceof PerplexityApiRequestError) {
+          res.status(502).json({
+            error: "upstream_request_failed",
+            serviceId,
+            upstreamStatusCode: error.statusCode,
+          });
+          return;
+        }
+
+        if (error instanceof TokenNotFoundError) {
+          res.status(404).json({
+            error: "token_not_found",
+            serviceId,
+            message: error.message,
+          });
+          return;
+        }
+
+        if (error instanceof TokenPriceApiError) {
           res.status(502).json({
             error: "upstream_request_failed",
             serviceId,
