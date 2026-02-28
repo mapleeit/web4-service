@@ -36,6 +36,8 @@ afterEach(() => {
   delete process.env.OPENROUTER_APP_NAME;
   delete process.env.X402_FACILITATOR_URL;
   delete process.env.X402_PRICE;
+  delete process.env.X402_PRICE_PERPLEXITY_SEARCH;
+  delete process.env.X402_PRICE_TOKEN_PRICE;
   delete process.env.X402_PAYMENT_OPTIONS;
 });
 
@@ -63,6 +65,10 @@ describe("GET /agent/services", () => {
         expect.objectContaining({
           id: "perplexity-search",
           payment: expect.objectContaining({ price: "$0.02" }),
+        }),
+        expect.objectContaining({
+          id: "token-price",
+          payment: expect.objectContaining({ price: "$0.001" }),
         }),
       ])
     );
@@ -122,7 +128,7 @@ describe("GET /agent/services", () => {
     );
   });
 
-  it("applies uniform X402_PRICE across all payment options", async () => {
+  it("applies global X402_PRICE to services without a per-service override", async () => {
     process.env.X402_PAYMENT_OPTIONS = JSON.stringify([
       {
         network: "eip155:8453",
@@ -161,6 +167,62 @@ describe("GET /agent/services", () => {
         price: "$0.05",
       }),
     ]);
+  });
+
+  it("uses per-service env var price when set", async () => {
+    process.env.X402_PRICE_PERPLEXITY_SEARCH = "$0.10";
+    process.env.X402_PRICE_TOKEN_PRICE = "$0.003";
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+    expect(res.status).toBe(200);
+
+    const search = res.body.services.find(
+      (s: { id: string }) => s.id === "perplexity-search"
+    );
+    const tokenPrice = res.body.services.find(
+      (s: { id: string }) => s.id === "token-price"
+    );
+
+    expect(search.payment.price).toBe("$0.10");
+    expect(tokenPrice.payment.price).toBe("$0.003");
+  });
+
+  it("per-service env var takes priority over global X402_PRICE", async () => {
+    process.env.X402_PRICE = "$0.05";
+    process.env.X402_PRICE_TOKEN_PRICE = "$0.002";
+
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+
+    const search = res.body.services.find(
+      (s: { id: string }) => s.id === "perplexity-search"
+    );
+    const tokenPrice = res.body.services.find(
+      (s: { id: string }) => s.id === "token-price"
+    );
+
+    // perplexity-search has no service-specific env, falls through to global
+    expect(search.payment.price).toBe("$0.05");
+    // token-price has a service-specific env, overrides both global and code default
+    expect(tokenPrice.payment.price).toBe("$0.002");
+  });
+
+  it("falls back to code-level default when no env vars set", async () => {
+    const app = createApp({ enableX402: false });
+    const res = await request(app).get("/agent/services");
+
+    const search = res.body.services.find(
+      (s: { id: string }) => s.id === "perplexity-search"
+    );
+    const tokenPrice = res.body.services.find(
+      (s: { id: string }) => s.id === "token-price"
+    );
+
+    // perplexity-search: no code default → global default $0.02
+    expect(search.payment.price).toBe("$0.02");
+    // token-price: code default $0.001
+    expect(tokenPrice.payment.price).toBe("$0.001");
   });
 });
 

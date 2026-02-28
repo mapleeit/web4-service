@@ -1,0 +1,261 @@
+# Project Knowledge Base — web4-service
+
+This document is the single source of truth for the project's architecture, conventions, and implementation details. Consult it before reading source files.
+
+## Overview
+
+**web4-service** is a pay-per-call AI agent services platform. It exposes HTTP endpoints that AI agents can discover and invoke, with payments handled via the **x402 protocol** (HTTP 402 micropayments in USDC on EVM chains). No API keys are needed — clients pay per request through on-chain USDC transfers.
+
+- **Production URL**: `https://web4svc.com` (hosted on Railway)
+- **GitHub**: `https://github.com/mapleeit/web4-service`
+- **License**: MIT
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Backend runtime | Node.js + Express 5 + TypeScript |
+| Payment protocol | x402 (`@x402/core`, `@x402/evm`, `@x402/express`) |
+| Frontend | React 19 + Vite 7 + Tailwind CSS 4 |
+| Backend tests | Jest 30 + ts-jest + supertest |
+| Frontend tests | Vitest 4 + Testing Library + Playwright (E2E) |
+| Dev server | `tsx watch` (hot reload on `src/` changes) |
+| Deployment | Railway (Node.js runtime, `npm start` → `node dist/index.js`) |
+
+## Directory Structure
+
+```
+web4-service/
+├── src/                          # Backend source (TypeScript)
+│   ├── index.ts                  # Entry point: creates app, listens on PORT
+│   ├── app.ts                    # Express app factory: routes, middleware, static serving
+│   ├── agentServices.ts          # Service registry: definitions, payment terms, invocation
+│   ├── perplexitySearch.ts       # Perplexity API integration (direct + OpenRouter proxy)
+│   ├── tokenPrice.ts            # CoinGecko token price lookup (search + simple/price)
+│   ├── x402Middleware.ts         # x402 payment middleware factory
+│   └── app.test.ts               # Backend integration tests (Jest)
+├── frontend/                     # React SPA (served as static files)
+│   ├── src/
+│   │   ├── main.tsx              # React entry point
+│   │   ├── App.tsx               # Root component: Header → Hero → Features → Services → Playground → Footer
+│   │   ├── index.css             # Global styles (Tailwind)
+│   │   ├── lib/api.ts            # API client: fetchServices(), invokeService()
+│   │   ├── components/           # UI components (Header, Hero, Features, Services, Playground, Footer)
+│   │   └── __tests__/            # Vitest unit tests (api, Header, Hero, Playground)
+│   ├── e2e/landing.spec.ts       # Playwright E2E tests
+│   └── public/
+│       ├── llms.txt              # LLM-readable API docs (keep in sync — see llms-txt-review rule)
+│       ├── robots.txt            # SEO robots file
+│       └── favicon.svg           # Site favicon
+├── local-scripts/
+│   └── paid-e2e.mjs             # Manual E2E script for real x402 payment testing (uses viem + x402 client)
+├── .cursor/rules/                # Cursor AI rules
+├── AGENTS.md                     # Cursor Cloud agent instructions
+├── README.md                     # User-facing project docs
+├── package.json                  # Backend deps and scripts
+├── tsconfig.json                 # Backend TS config (ES2022, NodeNext, strict)
+├── eslint.config.mjs             # ESLint flat config with TypeScript
+└── jest.config.js                # Jest config (ts-jest preset)
+```
+
+## Architecture & Data Flow
+
+### Request lifecycle
+
+```
+Client request
+  → Express static middleware (serves frontend from frontend/dist/)
+  → x402 payment middleware (intercepts paid routes, returns 402 if no valid payment)
+  → Route handler
+    → agentServices.invokeAgentService(serviceId, input)
+      → service.handler(input) — calls external API (e.g. Perplexity)
+  → Response: { serviceId, output: { ...service-specific fields } }
+```
+
+### Key abstractions
+
+1. **`AgentService`** (src/agentServices.ts) — Internal interface with `handler` function. Not exported.
+2. **`AgentServiceDescriptor`** — Public-facing service metadata (id, name, description, endpoint, schemas, payment terms). Exposed via catalog API.
+3. **`PaidRouteDefinition`** — Describes a paid route for x402 middleware registration (method, path, payment terms).
+4. **`X402PaymentTerms`** — Payment configuration per network: `{ scheme: "exact", network, asset: "USDC", price, payTo, facilitator }`.
+
+### Service registry pattern
+
+All services are defined in `createAgentServices()` in `src/agentServices.ts`. This function:
+- Parses `X402_PAYMENT_OPTIONS` env var to build payment terms
+- Returns an array of `AgentService` objects (each has a `handler` function)
+- Is called fresh on each request (env vars are re-read)
+
+Exported functions:
+- `listAgentServices()` → all service descriptors (for catalog)
+- `getAgentServiceDescriptor(id)` → single service descriptor
+- `listPaidRouteDefinitions()` → paid routes for x402 middleware
+- `invokeAgentService(id, input)` → execute a service handler
+- `buildAgentManifest(baseUrl)` → `.well-known/agent-services` manifest
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/health` | None | Health check (`{ status, uptime }`) |
+| GET | `/agent/services` | None | Service catalog with payment metadata |
+| GET | `/.well-known/agent-services` | None | Agent discovery manifest (absolute URLs) |
+| POST | `/agent/services/:serviceId/invoke` | x402 (paid only) | Invoke a service |
+| GET | `{*path}` | None | SPA fallback (serves frontend/dist/index.html) |
+
+### Response format
+
+Success: `{ serviceId: string, output: { ...service fields } }`
+
+Errors: `{ error: "error_code", serviceId?: string, message?: string }`
+
+Error codes: `invalid_service_id` (400), `invalid_service_input` (400), `payment_required` (402), `token_not_found` (404), `service_not_found` (404), `upstream_request_failed` (502), `service_unavailable` (503), `service_execution_error` (500).
+
+## Current Services
+
+### 1. echo (Free)
+- **Endpoint**: `POST /agent/services/echo/invoke`
+- **Input**: `{ message?: string }` — defaults to `"hello agent"`
+- **Output**: `{ message: string, echoedAt: string (ISO 8601) }`
+- **No payment required**
+
+### 2. perplexity-search (Paid)
+- **Endpoint**: `POST /agent/services/perplexity-search/invoke`
+- **Input**: `{ query: string (required), model?: string }`
+- **Output**: `{ answer: string, citations: string[], model: string }`
+- **Price**: `X402_PRICE_PERPLEXITY_SEARCH` → global `X402_PRICE` → `$0.02` (no code-level default)
+- **Implementation** (`src/perplexitySearch.ts`): Calls Perplexity chat completions API (or OpenRouter as proxy)
+- **Provider resolution**: `PERPLEXITY_API_PROVIDER` env var, or auto-detects based on which API key is set
+- **Default models**: `sonar-pro` (direct Perplexity), `perplexity/sonar-pro` (OpenRouter)
+- **Error classes**: `MissingPerplexityApiKeyError` (→ 503), `PerplexityApiRequestError` (→ 502), `AgentServiceInputError` (→ 400)
+
+### 3. token-price (Paid)
+- **Endpoint**: `POST /agent/services/token-price/invoke`
+- **Input**: `{ token: string (required), currency?: string (default "usd") }`
+- **Output**: `{ id, symbol, name, price, currency, change24h, marketCap, volume24h, lastUpdated }`
+- **Price**: `X402_PRICE_TOKEN_PRICE` → code default `$0.001` → global `X402_PRICE` → `$0.02`
+- **Implementation** (`src/tokenPrice.ts`): Two-step CoinGecko lookup — search by name/symbol/ID, then fetch price data
+- **API calls**: `GET /search?query={token}` (resolve to CoinGecko ID) → `GET /simple/price?ids={id}` (fetch price + market data)
+- **No API key required** — uses CoinGecko free tier (~10-30 req/min rate limit)
+- **Caching**: Two-layer in-memory TTL cache — search results cached 5 min (`searchCache`), price data cached 30 s (`priceCache`). Call `clearTokenPriceCache()` in tests to reset.
+- **Error classes**: `TokenNotFoundError` (→ 404), `TokenPriceApiError` (→ 502), `AgentServiceInputError` (→ 400)
+
+## x402 Payment Flow
+
+1. **x402Middleware.ts** creates Express middleware via `@x402/express`'s `paymentMiddleware()`
+2. It registers each paid route with its `accepts` config (network, price, payTo)
+3. Uses `ExactEvmScheme` from `@x402/evm` for USDC payment verification
+4. Payment verification goes through the configured facilitator (`X402_FACILITATOR_URL`)
+5. Unpaid requests to paid routes get HTTP 402 with `payment-required` header
+6. The `createApp()` factory accepts `enableX402` option (default: `process.env.X402_ENABLED !== "false"`)
+
+### Multi-chain support
+- `X402_PAYMENT_OPTIONS` is a JSON array; each entry has `network` (EVM CAIP-2), `payTo`, optional `facilitator`
+- When multiple options exist, `paymentOptions` array is included in service descriptors
+
+### Per-service pricing
+Price is resolved per service via `resolveServicePrice(serviceId, serviceDefault?)`:
+1. `X402_PRICE_{SERVICE_ID}` env var (ID uppercased, hyphens → underscores)
+2. `serviceDefault` (code-level default passed in service definition)
+3. `X402_PRICE` (global env var)
+4. `DEFAULT_X402_PRICE` (`$0.02`)
+
+Payment terms are built per service in `createAgentServices()` via `buildPaymentTerms(serviceId, serviceDefault?)`.
+
+## How to Add a New Service
+
+1. Create implementation file: `src/myNewService.ts` with handler function
+2. In `createAgentServices()`, add a `buildPaymentTerms()` call and service definition:
+   ```typescript
+   const myTerms = buildPaymentTerms("my-new-service", "$0.01"); // optional code-level default
+   // ...
+   {
+     id: "my-new-service",
+     name: "My New Service",
+     description: "...",
+     endpoint: "/agent/services/my-new-service/invoke",
+     inputSchema: { type: "object", required: ["field"], properties: { field: { type: "string" } } },
+     outputSchema: { type: "object", properties: { result: { type: "string" } } },
+     payment: myTerms.primary,
+     paymentOptions: myTerms.options,
+     handler: async (input) => {
+       // validate input, call external API, return output
+     },
+   }
+   ```
+3. If the handler can throw new error types, handle them in `app.ts`'s catch block
+4. Add tests to `src/app.test.ts`
+5. Update `frontend/public/llms.txt` (required by llms-txt-review rule)
+6. Update `README.md`
+
+**No route registration needed** — the dynamic `/agent/services/:serviceId/invoke` route handles all services. Paid routes are automatically protected by x402 middleware if the service has `payment` defined.
+
+## Frontend
+
+Single-page React app with landing page sections:
+- **Header**: Navigation with mobile menu
+- **Hero**: Tagline with copy-to-clipboard
+- **Features**: Feature highlights
+- **Services**: Live service catalog (fetches from `/agent/services`)
+- **Playground**: Interactive API testing UI (select service → fill input → invoke → see response)
+- **Footer**: Links
+
+API client (`frontend/src/lib/api.ts`):
+- `fetchServices()` → `GET /agent/services`
+- `invokeService(serviceId, input)` → `POST /agent/services/:serviceId/invoke` (returns `{ status, body }`)
+
+Vite dev server proxies API requests to backend on port 3000.
+
+## Environment Variables
+
+### Required
+| Variable | Description |
+|---|---|
+| `X402_PAYMENT_OPTIONS` | JSON array: `[{ "network": "eip155:8453", "payTo": "0x..." }]` |
+| `PERPLEXITY_API_KEY` | Perplexity API key (when provider=perplexity) |
+| `OPENROUTER_API_KEY` | OpenRouter API key (when provider=openrouter) |
+
+### Optional
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | `3000` | Server listen port |
+| `X402_ENABLED` | `true` | Set `false` to bypass paywall |
+| `X402_PRICE` | `$0.02` | Global default price (USDC), used when no per-service price is set |
+| `X402_PRICE_PERPLEXITY_SEARCH` | — | Per-service price override for perplexity-search |
+| `X402_PRICE_TOKEN_PRICE` | — | Per-service price override for token-price (code default: `$0.001`) |
+| `X402_FACILITATOR_URL` | `https://facilitator.payai.network` | Facilitator endpoint |
+| `PERPLEXITY_API_PROVIDER` | auto-detect | `perplexity` or `openrouter` |
+| `PERPLEXITY_MODEL` | provider default | Model override |
+| `PERPLEXITY_CHAT_COMPLETIONS_URL` | `https://api.perplexity.ai/chat/completions` | API URL override |
+| `OPENROUTER_CHAT_COMPLETIONS_URL` | `https://openrouter.ai/api/v1/chat/completions` | OpenRouter URL override |
+| `OPENROUTER_HTTP_REFERER` | — | OpenRouter attribution header |
+| `OPENROUTER_APP_NAME` | — | OpenRouter X-Title header |
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Backend dev server with hot reload (tsx watch) |
+| `npm run build` | Build backend + frontend (`tsc && cd frontend && npm install && npm run build`) |
+| `npm start` | Run production build (`node dist/index.js`) |
+| `npm run lint` | ESLint on `src/` |
+| `npm test` | Jest backend tests |
+| `npm run dev:frontend` | Vite dev server for frontend |
+| `npm run test:frontend` | Vitest frontend unit tests |
+| `npm run test:e2e` | Playwright E2E tests |
+
+## Testing
+
+- **Backend** (`src/app.test.ts`): Integration tests using supertest. Tests cover health endpoint, service catalog, multi-network payment options, echo invocation, perplexity search (with fetch mocks), OpenRouter routing, error cases (missing key → 503, upstream error → 502, bad input → 400, unknown service → 404), and x402 402 response.
+- **Frontend unit** (`frontend/src/__tests__/`): Vitest + Testing Library tests for API client functions and React components.
+- **Frontend E2E** (`frontend/e2e/landing.spec.ts`): Playwright tests for landing page.
+- **Manual E2E** (`local-scripts/paid-e2e.mjs`): Real x402 payment flow test using viem wallet + x402 client SDK. Tests against production/staging. Supports multi-chain, balance checks, clock skew detection, and detailed diagnostics.
+
+## Design Decisions & Conventions
+
+- Services are defined declaratively in a single array — no separate route registration needed
+- `createAgentServices()` is called per-request (not cached), so env var changes take effect immediately
+- Per-service pricing: `X402_PRICE_{SERVICE_ID}` env var → code default → global `X402_PRICE` → `$0.02`
+- The `AgentServiceInputError` class signals client input errors (→ 400) vs upstream failures (→ 502)
+- Frontend is built into `frontend/dist/` and served as static files by Express
+- The backend uses Express 5 (not 4) with `{*path}` wildcard syntax

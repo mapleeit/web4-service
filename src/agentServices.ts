@@ -143,23 +143,32 @@ const toPaymentTerms = (
     facilitator: option.facilitator,
   }));
 
-const resolvePaymentTerms = (
-  price: string
-): {
-  primary: X402PaymentTerms;
-  options?: X402PaymentTerms[];
-} => {
-  const terms = toPaymentTerms(parsePaymentOptions(), price);
-  return {
-    primary: terms[0],
-    options: terms.length > 1 ? terms : undefined,
-  };
-};
+const serviceIdToEnvKey = (serviceId: string): string =>
+  `X402_PRICE_${serviceId.toUpperCase().replace(/-/g, "_")}`;
+
+const resolveServicePrice = (
+  serviceId: string,
+  serviceDefault?: string
+): string =>
+  asNonEmptyString(process.env[serviceIdToEnvKey(serviceId)])
+  ?? serviceDefault
+  ?? asNonEmptyString(process.env.X402_PRICE)
+  ?? DEFAULT_X402_PRICE;
 
 const createAgentServices = (): AgentService[] => {
-  const servicePrice =
-    asNonEmptyString(process.env.X402_PRICE) ?? DEFAULT_X402_PRICE;
-  const paymentTerms = resolvePaymentTerms(servicePrice);
+  const paymentOptions = parsePaymentOptions();
+
+  const buildPaymentTerms = (serviceId: string, serviceDefault?: string) => {
+    const price = resolveServicePrice(serviceId, serviceDefault);
+    const terms = toPaymentTerms(paymentOptions, price);
+    return {
+      primary: terms[0],
+      options: terms.length > 1 ? terms : undefined,
+    };
+  };
+
+  const searchTerms = buildPaymentTerms("perplexity-search");
+  const tokenPriceTerms = buildPaymentTerms("token-price", "$0.001");
 
   return [
     {
@@ -210,8 +219,8 @@ const createAgentServices = (): AgentService[] => {
           model: { type: "string" },
         },
       },
-      payment: paymentTerms.primary,
-      paymentOptions: paymentTerms.options,
+      payment: searchTerms.primary,
+      paymentOptions: searchTerms.options,
       handler: async (input) => {
         const query = asNonEmptyString(input.query);
         if (!query) {
@@ -257,8 +266,8 @@ const createAgentServices = (): AgentService[] => {
           lastUpdated: { type: "string", format: "date-time" },
         },
       },
-      payment: paymentTerms.primary,
-      paymentOptions: paymentTerms.options,
+      payment: tokenPriceTerms.primary,
+      paymentOptions: tokenPriceTerms.options,
       handler: async (input) => {
         const token = asNonEmptyString(input.token);
         if (!token) {

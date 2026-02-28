@@ -33,7 +33,7 @@ Error responses use the format `{ "error": "error_code", "serviceId": "..." }` w
 AI-powered web search via Perplexity. Returns answers with source citations.
 
 - Endpoint: `POST /agent/services/perplexity-search/invoke`
-- Price: $0.03 per request (USDC, via x402)
+- Price: configurable per deployment (default $0.02, USDC, via x402)
 - Input: `{ "query": "your search query", "model": "optional model override" }`
 - Output (inside `output` field): `{ "answer": "...", "citations": ["url1", "url2"], "model": "sonar-pro" }`
 - `query` is required; `model` is optional
