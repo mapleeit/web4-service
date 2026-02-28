@@ -48,6 +48,13 @@ web4-service/
 │       ├── llms.txt              # LLM-readable API docs (keep in sync — see llms-txt-review rule)
 │       ├── robots.txt            # SEO robots file
 │       └── favicon.svg           # Site favicon
+├── mcp-server/                   # MCP server — wraps web4 API for AI agents
+│   ├── src/
+│   │   ├── index.ts              # McpServer setup + stdio transport
+│   │   ├── client.ts             # HTTP client with x402 payment handling
+│   │   └── tools.ts              # 5 MCP tool definitions (list, echo, search, token-price, ens-resolve)
+│   ├── package.json              # Separate npm project (@modelcontextprotocol/sdk, @x402/*)
+│   └── tsconfig.json
 ├── local-scripts/
 │   └── paid-e2e.mjs             # Manual E2E script for real x402 payment testing (uses viem + x402 client)
 ├── .cursor/rules/                # Cursor AI rules
@@ -265,6 +272,22 @@ Vite dev server proxies API requests to backend on port 3000.
 - **Frontend unit** (`frontend/src/__tests__/`): Vitest + Testing Library tests for API client functions and React components.
 - **Frontend E2E** (`frontend/e2e/landing.spec.ts`): Playwright tests for landing page.
 - **Manual E2E** (`local-scripts/paid-e2e.mjs`): Real x402 payment flow test using viem wallet + x402 client SDK. Tests against production/staging. Supports multi-chain, balance checks, clock skew detection, and detailed diagnostics.
+
+## MCP Server (`mcp-server/`)
+
+Standalone MCP (Model Context Protocol) server that wraps web4-service API for AI agents (Claude, Cursor).
+
+- **Transport**: stdio (local process)
+- **SDK**: `@modelcontextprotocol/sdk` v1.x, TypeScript, Zod schemas
+- **Payment**: Uses `@x402/core/client` + `@x402/evm` for automatic x402 payment on paid tools
+- **Tools** (5):
+  - `web4_list_services` — discover services (free)
+  - `web4_echo` — connectivity test (free)
+  - `web4_search` — Perplexity web search (paid)
+  - `web4_token_price` — CoinGecko price lookup (paid)
+  - `web4_ens_resolve` — ENS resolution (paid)
+- **Env vars**: `WEB4_SERVICE_URL` (default `https://web4svc.com`), `WEB4_WALLET_PRIVATE_KEY` (required for paid tools), `WEB4_PREFERRED_NETWORK` (default `eip155:8453`)
+- **Build**: `cd mcp-server && npm install && npm run build` → `dist/index.js`
 
 ## Design Decisions & Conventions
 

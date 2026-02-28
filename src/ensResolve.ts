@@ -10,12 +10,12 @@ export interface EnsResolveInput {
   address?: string;
 }
 
-export interface EnsResolveOutput {
+export type EnsResolveOutput = {
   name: string | null;
   address: string | null;
   avatar: string | null;
   records: Record<string, string | null>;
-}
+};
 
 export class EnsNotFoundError extends Error {
   constructor(input: string) {

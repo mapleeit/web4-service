@@ -81,6 +81,10 @@ Free services (like echo) skip the payment flow entirely.
 
 Payments are accepted in USDC via the PayAI facilitator. The specific networks available depend on the deployment configuration (set via `X402_PAYMENT_OPTIONS`). Query `GET /agent/services` to see the current `paymentOptions` for each paid service, which lists accepted networks.
 
+## MCP Server
+
+An MCP (Model Context Protocol) server is available at `mcp-server/` in the repository, enabling AI agents like Claude and Cursor to natively discover and invoke all web4-service endpoints with automatic x402 payment handling. See the [MCP server README](https://github.com/mapleeit/web4-service/tree/main/mcp-server) for setup.
+
 ## Links
 
 - [GitHub](https://github.com/mapleeit/web4-service)

@@ -150,3 +150,9 @@ Service ID to env var conversion: uppercase, hyphens → underscores.
 
 When `PERPLEXITY_API_PROVIDER=openrouter`, use OpenRouter model IDs such as
 `perplexity/sonar-pro` or `perplexity/sonar`.
+
+## MCP Server
+
+The `mcp-server/` directory contains an MCP (Model Context Protocol) server that lets AI agents (Claude, Cursor) natively use all web4-service endpoints with automatic x402 payment.
+
+See [mcp-server/README.md](mcp-server/README.md) for setup instructions.
